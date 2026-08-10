@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -19,7 +19,8 @@ class CanvasConnection(Base):
     canvas_url: Mapped[str] = mapped_column(String, nullable=False)
     # never store the raw token — always Fernet-encrypted before insert
     encrypted_token: Mapped[str] = mapped_column(Text, nullable=False)
-    # Stable keyed fingerprint used only to prevent token reuse across users.
+    # Stable keyed fingerprint used only to prevent token reuse within one
+    # Canvas institution. The URL and fingerprint are unique together.
     token_fingerprint: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     # Last time services/canvas.py's sync_courses_if_stale actually hit
@@ -39,7 +40,13 @@ class CanvasConnection(Base):
     # one token per user per school — prevents duplicate rows for the same Canvas URL
     __table_args__ = (
         UniqueConstraint("user_id", "canvas_url", name="uq_user_canvas_url"),
-        UniqueConstraint("token_fingerprint", name="uq_canvas_token_fingerprint"),
+        Index(
+            "uq_canvas_url_token_fingerprint",
+            "canvas_url",
+            "token_fingerprint",
+            unique=True,
+            postgresql_where=token_fingerprint.is_not(None),
+        ),
     )
 
     user: Mapped["User"] = relationship("User", back_populates="canvas_connections")

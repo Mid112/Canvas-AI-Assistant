@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """Tests for the bounded multi-step loop itself (see MAX_TURN_STEPS,
 _CHAINABLE_READ_ACTIONS, and the step loop in handle_chat_message,
 app/backend/app/services/chat.py) — as opposed to
@@ -35,7 +37,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
 

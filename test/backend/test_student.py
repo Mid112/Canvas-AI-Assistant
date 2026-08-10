@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 import uuid
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -31,7 +33,7 @@ def client():
         yield c
 
 
-def _register_with_canvas(client) -> tuple[dict, int]:
+def _register_with_canvas(client, *, token_suffix: str = "") -> tuple[dict, int]:
     """Register a fresh user, connect Canvas, seed one course. Returns (headers, local_course_id)."""
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
@@ -44,7 +46,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token() + token_suffix, "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -175,7 +177,7 @@ def test_list_students_empty_roster(client):
 def test_list_students_cross_instructor_isolation(client):
     """Instructor B cannot fetch students for a course owned by instructor A — returns 404."""
     headers_a, local_course_id = _register_with_canvas(client)
-    headers_b, _ = _register_with_canvas(client)
+    headers_b, _ = _register_with_canvas(client, token_suffix="-second")
 
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock):
         response = client.get(
@@ -261,7 +263,7 @@ async def test_fetch_enrollments_includes_user():
         mock_pages.return_value = []
         from app.integrations.canvas import fetch_enrollments
 
-        await fetch_enrollments(123, "test-token", "https://canvas.test")
+        await fetch_enrollments(123, unique_canvas_token(), "https://canvas.test")
 
     params = mock_pages.call_args.kwargs["params"]
     assert params["include[]"] == "user"

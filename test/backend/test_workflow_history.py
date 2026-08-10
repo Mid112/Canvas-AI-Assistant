@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """Tests for workflow history retrieval (UR2.26 / #622)."""
 
 import uuid
@@ -17,7 +19,7 @@ def client():
         yield c
 
 
-def _register_with_canvas(client) -> tuple[dict, int]:
+def _register_with_canvas(client, *, token_suffix: str = "") -> tuple[dict, int]:
     """Register a fresh instructor, connect Canvas, seed one course, and
     set it active — the active-course PATCH also seeds canvas_course_names
     (see set_active_course's sync_courses_if_stale call), which is what
@@ -35,7 +37,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token() + token_suffix, "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -111,7 +113,7 @@ def test_workflow_history_scoped_to_current_user(client):
     headers_a, local_course_id_a = _register_with_canvas(client)
     _create_pending_workflow(client, headers_a, local_course_id_a)
 
-    headers_b, _ = _register_with_canvas(client)
+    headers_b, _ = _register_with_canvas(client, token_suffix="-second")
 
     response = client.get("/api/v1/history/workflows", headers=headers_b)
     assert response.status_code == 200

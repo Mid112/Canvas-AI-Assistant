@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """Tests for the mid-conversation course-switch pre-resolver (see
 _resolve_course_switch in app/backend/app/services/chat.py) — closes a real
 gap where a course switch was only detected from the main model's OWN
@@ -37,10 +39,7 @@ def _register_with_two_courses(
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            # Unique per registration: Canvas tokens are globally unique now,
-            # so a shared literal makes every test after the first get a 409
-            # and never get a connection at all.
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
 

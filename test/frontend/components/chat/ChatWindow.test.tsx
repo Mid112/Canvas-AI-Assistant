@@ -20,6 +20,14 @@ import { renderWithInstitution } from "../../utils/renderWithInstitution";
 
 const mockUseAuth = vi.fn();
 const mockUseActiveCourse = vi.hoisted(() => vi.fn());
+const mockNavigate = vi.hoisted(() => vi.fn());
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>(
+    "react-router-dom",
+  );
+  return { ...actual, useNavigate: () => mockNavigate };
+});
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -73,6 +81,7 @@ const mockedReverseWorkflow = vi.mocked(reverseWorkflow);
 describe("ChatWindow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNavigate.mockReset();
     mockUseAuth.mockReturnValue({
       accessToken: "test-token",
       user: null,
@@ -177,6 +186,7 @@ describe("ChatWindow", () => {
     mockedSendAssistantMessage.mockResolvedValueOnce({
       content: "I prepared the quiz form.",
       conversationId: 1,
+      autoNavigate: false,
       navigateTo: {
         path: "/instructor/quizzes/create",
         state: { aiQuizDraft: { title: "Midterm" } },
@@ -203,6 +213,7 @@ describe("ChatWindow", () => {
     expect(
       screen.getByRole("link", { name: /Open quiz creation form/i }),
     ).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   // Verifies: Keeps chat usable while active course context is loading.
@@ -691,6 +702,43 @@ describe("ChatWindow", () => {
     );
     expect(screen.getByText("Updated preview for the midterm exam.")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Confirm" })).toHaveLength(1);
+  });
+
+  it("does not attach an unrelated question to a pending preview", async () => {
+    const user = userEvent.setup();
+    mockedSendAssistantMessage
+      .mockResolvedValueOnce({
+        content: "I can create the midterm exam after you confirm.",
+        conversationId: 7,
+        pendingMessageId: 42,
+        interpretedAction: {
+          action: "Create Assignment",
+          course: "CPSC 310",
+          affectedStudents: "Entire class",
+        },
+      })
+      .mockResolvedValueOnce({
+        content: "The syllabus should include grading, policies, and deadlines.",
+        conversationId: 7,
+      });
+
+    renderWithInstitution(<ChatWindow />);
+    const input = screen.getByRole("textbox", { name: "Chat message" });
+    await user.type(input, "Create a midterm exam");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByRole("button", { name: "Confirm" });
+
+    await user.type(input, "What should I add to my syllabus?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/The syllabus should include/)).toBeInTheDocument();
+    });
+    expect(mockedSendAssistantMessage).toHaveBeenLastCalledWith(
+      "test-token",
+      "What should I add to my syllabus?",
+      expect.objectContaining({ pendingMessageId: undefined }),
+    );
   });
 
   it("sends an initialPrompt exactly once under React StrictMode's dev-only double effect invocation", async () => {

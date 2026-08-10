@@ -87,9 +87,9 @@ describe("InstructorCoursesCard", () => {
       </MemoryRouter>,
     );
 
-    expect(
-      screen.getByRole("button", { name: "Active Course" }),
-    ).toBeDisabled();
+    const activeButton = screen.getByRole("button", { name: "Active Course" });
+    expect(activeButton).toBeDisabled();
+    expect(activeButton).toHaveAttribute("aria-pressed", "true");
   });
 
   it("shows an Unpublished badge and disables Set Active for an unpublished course", () => {
@@ -168,5 +168,4 @@ describe("InstructorCoursesList", () => {
     expect(screen.getAllByRole("button", { name: "Set Active" })).toHaveLength(1);
   });
 });
-
 

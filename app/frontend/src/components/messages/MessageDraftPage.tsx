@@ -12,6 +12,10 @@ import { useForm, useWatch } from "react-hook-form";
 import { useLocation } from "react-router-dom";
 
 import { ConfirmationDialog } from "@/components/messages/ConfirmationDialog";
+import {
+  getDeliveryAudienceError,
+  type MessageDeliveryMode,
+} from "@/components/messages/messageDelivery";
 import { MessageEditor } from "@/components/messages/MessageEditor";
 import { MessagePreview } from "@/components/messages/MessagePreview";
 import { MessageTemplateSummary } from "@/components/messages/MessageTemplateSummary";
@@ -141,9 +145,9 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<Set<string>>(
     new Set(),
   );
-  const [deliveryMode, setDeliveryMode] = useState<
-    "announcement" | "private_message"
-  >(fetchOptions?.deliveryMode ?? "announcement");
+  const [deliveryMode, setDeliveryMode] = useState<MessageDeliveryMode>(
+    fetchOptions?.deliveryMode ?? "announcement",
+  );
 
   const {
     register,
@@ -308,7 +312,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       next.add(recipientId);
     }
     setSelectedRecipientIds(next);
-    setDeliveryMode(next.size === 0 ? "announcement" : "private_message");
+    setDeliveryMode(next.size === 0 ? deliveryMode : "private_message");
     syncTemplateForRecipientSelection(next);
   };
 
@@ -317,7 +321,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     const next = new Set(selectedRecipientIds);
     next.delete(recipientId);
     setSelectedRecipientIds(next);
-    setDeliveryMode(next.size === 0 ? "announcement" : "private_message");
+    setDeliveryMode(next.size === 0 ? deliveryMode : "private_message");
     syncTemplateForRecipientSelection(next);
   };
 
@@ -327,7 +331,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         ? new Set<string>()
         : new Set(recipients.map((recipient) => recipient.id));
     setSelectedRecipientIds(next);
-    setDeliveryMode(next.size === 0 ? "announcement" : "private_message");
+    setDeliveryMode(next.size === 0 ? deliveryMode : "private_message");
     syncTemplateForRecipientSelection(next);
   };
 
@@ -453,6 +457,16 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     setSendError(null);
     setSuccessMessage(null);
     setSentMessage(null);
+
+    const audienceError = getDeliveryAudienceError(
+      deliveryMode,
+      selectedRecipients.length,
+    );
+    if (audienceError) {
+      setSendError(audienceError);
+      return;
+    }
+
     setIsConfirmOpen(true);
   };
 
@@ -481,11 +495,13 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       return;
     }
 
-    if (deliveryMode === "private_message" && selectedRecipients.length === 0) {
+    const audienceError = getDeliveryAudienceError(
+      deliveryMode,
+      selectedRecipients.length,
+    );
+    if (audienceError) {
       setIsConfirmOpen(false);
-      setSendError(
-        "Select at least one student for a private message, or switch to a course announcement.",
-      );
+      setSendError(audienceError);
       return;
     }
 
@@ -658,6 +674,20 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
                 ? `This will be sent privately to ${selectedRecipients.length} selected student${selectedRecipients.length === 1 ? "" : "s"}.`
                 : "Select students to send privately, or leave everyone unselected for a course announcement."}
           </p>
+          {deliveryMode === "private_message" && selectedRecipients.length === 0 ? (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto px-0 text-sky-950 underline"
+              onClick={() => {
+                setDeliveryMode("announcement");
+                applyTemplatePreset("course-announcement");
+              }}
+            >
+              Switch to course announcement
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -755,6 +785,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         subject={previewValues.subject}
         body={previewValues.body}
         isSending={pageState === "sending"}
+        deliveryMode={deliveryMode}
         onConfirm={() => void handleConfirmSend()}
       />
     </div>

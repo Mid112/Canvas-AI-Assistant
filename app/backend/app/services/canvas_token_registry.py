@@ -1,7 +1,8 @@
 from cryptography.fernet import InvalidToken
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.canvas_url import canvas_url_candidates
 from app.core.security import decrypt_canvas_token, fingerprint_canvas_token
 from app.models.canvas_connection import CanvasConnection
 
@@ -9,40 +10,47 @@ from app.models.canvas_connection import CanvasConnection
 async def token_is_already_used(
     db: AsyncSession,
     plain_token: str,
+    canvas_url: str,
     *,
     exclude_connection_id: int | None = None,
 ) -> bool:
-    """Check whether another connection already holds this Canvas token.
+    """Check token ownership within one Canvas institution.
 
-    Rows written since the fingerprint column landed are matched by an indexed
-    equality check on that column -- the reason it exists. Only rows predating
-    it (fingerprint NULL) still need decrypt-and-compare, which keeps the
-    duplicate policy covering them without a migration that would have to
-    handle the decrypted Canvas token in SQL.
-
-    The fingerprints are deliberately not backfilled here. Any database that
-    already contains two connections sharing a token would violate
-    uq_canvas_token_fingerprint the moment both rows were written, so a
-    backfill has to be a deliberate, conflict-resolving migration rather than
-    a side effect of someone connecting a token.
+    Older databases have encrypted tokens but no fingerprint. They are
+    decrypted only during a token-connect operation so they are still covered
+    by the duplicate policy without a secret-bearing SQL backfill migration.
     """
     target_fingerprint = fingerprint_canvas_token(plain_token)
+    url_candidates = canvas_url_candidates(canvas_url)
 
-    indexed_match = select(CanvasConnection.id).where(
-        CanvasConnection.token_fingerprint == target_fingerprint
+    indexed_match = await db.scalar(
+        select(CanvasConnection.id).where(
+            CanvasConnection.canvas_url.in_(url_candidates),
+            CanvasConnection.token_fingerprint == target_fingerprint,
+            CanvasConnection.id != exclude_connection_id
+            if exclude_connection_id is not None
+            else True,
+        )
     )
-    if exclude_connection_id is not None:
-        indexed_match = indexed_match.where(CanvasConnection.id != exclude_connection_id)
-    if await db.scalar(indexed_match.limit(1)) is not None:
+    if indexed_match is not None:
         return True
 
-    legacy_connections = (
+    # Legacy rows may have either no fingerprint or the pre-v1 format. They
+    # are the only rows that need decryption during the transition; successful
+    # scans upgrade the old format so this set shrinks over time.
+    connections = (
         await db.scalars(
-            select(CanvasConnection).where(CanvasConnection.token_fingerprint.is_(None))
+            select(CanvasConnection).where(
+                CanvasConnection.canvas_url.in_(url_candidates),
+                or_(
+                    CanvasConnection.token_fingerprint.is_(None),
+                    ~CanvasConnection.token_fingerprint.startswith("v1:"),
+                ),
+            )
         )
     ).all()
 
-    for connection in legacy_connections:
+    for connection in connections:
         if connection.id == exclude_connection_id:
             continue
         try:
@@ -52,7 +60,18 @@ async def token_is_already_used(
             # and reconnect flows; it must not make a new valid token unusable.
             continue
 
-        if fingerprint_canvas_token(legacy_token) == target_fingerprint:
+        legacy_fingerprint = fingerprint_canvas_token(legacy_token)
+        if legacy_fingerprint == target_fingerprint:
             return True
+
+        fingerprint_owner = await db.scalar(
+            select(CanvasConnection.id).where(
+                CanvasConnection.canvas_url.in_(url_candidates),
+                CanvasConnection.token_fingerprint == legacy_fingerprint,
+                CanvasConnection.id != connection.id,
+            )
+        )
+        if fingerprint_owner is None:
+            connection.token_fingerprint = legacy_fingerprint
 
     return False

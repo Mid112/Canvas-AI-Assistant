@@ -357,10 +357,9 @@ describe("InstructorMessagesPage", () => {
     expect(await screen.findByLabelText("Subject")).toBeInTheDocument();
   });
 
-  // Verifies the bookmark path for the removed Announcements tab: ?tab=announcements
-  // has to land on the unified composer in announcement mode, not 404 into the
-  // inbox. The tab is gone, but the URL is still out there in browser history.
-  it("redirects the old announcements tab to the compose announcement view", async () => {
+  // Legacy bookmarks should redirect to the unified composer, which defaults
+  // to a public announcement when no students are selected.
+  it("redirects the legacy announcements URL to public announcement compose", async () => {
     mockUseAuth.mockReturnValue({
       accessToken: "token",
       user: {
@@ -377,8 +376,13 @@ describe("InstructorMessagesPage", () => {
       refreshUser: vi.fn(),
     });
 
-    renderMessagesPage({ tab: "announcements" });
-
+    renderWithRouter(<InstructorMessagesPage />, {
+      routerProps: { initialEntries: ["/?tab=announcements"] },
+    });
+    expect(screen.queryByRole("tab", { name: "Announcements" })).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("PUBLIC COURSE ANNOUNCEMENT"),
+    ).toBeInTheDocument();
     expect(await screen.findByLabelText("Subject")).toBeInTheDocument();
     expect(
       await screen.findByText(

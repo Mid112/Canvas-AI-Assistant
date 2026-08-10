@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 import asyncio
 import uuid
 from unittest.mock import AsyncMock, patch
@@ -62,7 +64,7 @@ def test_instructor_dashboard_with_seeded_course(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": canvas_url},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": canvas_url},
             headers=headers,
         )
 
@@ -102,7 +104,7 @@ def test_instructor_dashboard_tolerates_one_course_refresh_failure(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": canvas_url},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": canvas_url},
             headers=headers,
         )
 
@@ -148,7 +150,7 @@ def test_instructor_dashboard_bounded_concurrency(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": canvas_url},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": canvas_url},
             headers=headers,
         )
 
@@ -203,7 +205,7 @@ def test_dashboard_assignment_count_reflects_canvas_deletion(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": canvas_url},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": canvas_url},
             headers=headers,
         )
 
@@ -252,7 +254,7 @@ def test_dashboard_student_count_reflects_canvas_unenrollment(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": canvas_url},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": canvas_url},
             headers=headers,
         )
 
@@ -303,7 +305,7 @@ def test_dashboard_missing_and_late_counts_from_real_submissions(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": canvas_url},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": canvas_url},
             headers=headers,
         )
 
@@ -396,7 +398,7 @@ def test_dashboard_excludes_deleted_course_from_aggregates(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": canvas_url},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": canvas_url},
             headers=headers,
         )
 

@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """Workflow pause/resume/rename transitions for multi-preview management (#1237)."""
 
 import uuid
@@ -17,7 +19,7 @@ def client():
         yield c
 
 
-def _register_with_canvas(client) -> tuple[dict, int]:
+def _register_with_canvas(client, *, token_suffix: str = "") -> tuple[dict, int]:
     email = f"pause_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
@@ -29,7 +31,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token() + token_suffix, "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -282,7 +284,7 @@ def test_cross_user_pause_returns_404(client):
     conversation_id, pending_message_id = _create_pending_preview(
         client, owner_headers, local_course_id
     )
-    other_headers, _ = _register_with_canvas(client)
+    other_headers, _ = _register_with_canvas(client, token_suffix="-second")
 
     pause = client.post(
         "/api/v1/chat/pause",

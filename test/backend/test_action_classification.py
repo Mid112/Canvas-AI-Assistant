@@ -2,6 +2,9 @@ import pytest
 
 from app.mcp_tools.schemas import ACTION_CLASSIFICATION, ACTION_SCHEMAS, is_reversible
 
+# These are semantic/meta envelopes, not Canvas operations.  Keep this list in
+# sync with ACTION_SCHEMAS so adding a language-facing intent envelope does not
+# make the classification completeness test fail.
 CONVERSATIONAL_ACTIONS = {
     "out_of_scope",
     "clarify",
@@ -36,7 +39,7 @@ def test_writes_without_undo_paths_are_irreversible():
 
 # Verifies: Conversational actions are not classified.
 def test_conversational_actions_are_not_classified():
-    """out_of_scope/clarify/intent_preview/respond aren't Canvas operations
+    """Meta actions aren't Canvas operations
     at all — they shouldn't appear in the classification table."""
     for action in CONVERSATIONAL_ACTIONS:
         assert action not in ACTION_CLASSIFICATION

@@ -6,6 +6,7 @@ from app.services.chat import (
     _build_grade_handoff_result,
     _build_grouped_grade_update_result,
     _grade_partial_plan,
+    _preserve_grade_clarification_context,
     _is_bulk_student_reference,
 )
 
@@ -44,6 +45,44 @@ def test_grade_partial_plan_preserves_feedback():
     assert "reason" not in partial_plan
 
 
+def test_grade_resolver_clarification_preserves_all_user_grade_context():
+    """A clarify must not lose the grade details already given.
+
+    `reason` is deliberately absent from the expectations: UpdateGradeAction
+    accepts the old spelling but normalizes it to `feedback` at the boundary,
+    so nothing downstream ever sees a separate reason field.
+    """
+    action = UpdateGradeAction.model_validate(
+        {
+            "action": "update_grade",
+            "local_course_id": 7,
+            "assignment_reference": "ggg",
+            "student_reference": "coin",
+            "new_grade": "100",
+            "reason": "Instructor rationale",
+        }
+    )
+
+    result = _preserve_grade_clarification_context(
+        {
+            "action": "clarify",
+            "question": "Which assignment?",
+            "partial_plan": {"local_course_id": 7},
+        },
+        action,
+    )
+
+    assert result["partial_plan"] == {
+        "local_course_id": 7,
+        "assignment_reference": "ggg",
+        "student_reference": "coin",
+        "new_grade": "100",
+        "feedback": "Instructor rationale",
+    }
+    assert result["_server_preserved_grade_context"] == {
+        "new_grade": "100",
+        "feedback": "Instructor rationale",
+    }
 def test_bulk_grade_update_builds_grades_tab_handoff():
     """Bulk grade requests should redirect to the shared Grades tab flow.
 

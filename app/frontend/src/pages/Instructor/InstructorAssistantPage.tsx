@@ -1,5 +1,12 @@
 import { ChevronRight, History, Loader2, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { AssistantLimitedModeBanner } from "@/components/chat/AssistantLimitedModeBanner";
@@ -166,8 +173,15 @@ export function InstructorAssistantPage() {
   // selection. pendingConversationId is read from a ref inside the effect so
   // loading a transcript does not POST /chat/course-context and fork away
   // from the conversation the instructor just opened (#1507 re-review).
+  //
+  // Synced in a layout effect rather than assigned during render: a render-time
+  // ref write is what react-hooks/refs flags, and it can be discarded when a
+  // render is thrown away. Committed before paint, so the effect below still
+  // reads the current value on the same tick.
   const pendingConversationIdRef = useRef(pendingConversationId);
-  pendingConversationIdRef.current = pendingConversationId;
+  useLayoutEffect(() => {
+    pendingConversationIdRef.current = pendingConversationId;
+  }, [pendingConversationId]);
   // Keyed by tab *and* course, not by course alone. Tabs are one-per-course
   // now, but the pairing is not stable over time: closing a course's tab and
   // reopening it produces a new tab with no conversation id, and the sync is

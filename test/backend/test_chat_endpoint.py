@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -250,7 +252,7 @@ def test_chat_resolves_course_name_before_calling_model(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -305,7 +307,7 @@ def test_chat_reuses_conversation_course_context_on_followup(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -363,7 +365,7 @@ def test_chat_refreshes_renamed_course_context_and_matches_course_code(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -464,7 +466,7 @@ def test_chat_followup_stays_on_conversation_course_despite_conflicting_active_c
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -556,7 +558,7 @@ def test_explicit_course_in_message_beats_active_course(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -639,7 +641,7 @@ def test_ambient_local_course_id_forks_away_from_an_already_resolved_conversatio
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -806,7 +808,7 @@ def test_history_keeps_intent_preview_full_for_modify_turn(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -877,7 +879,7 @@ def test_course_name_resolution_is_exact_not_fuzzy(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -942,7 +944,7 @@ def test_chat_uses_saved_active_course_when_client_context_is_not_ready(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -996,7 +998,7 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -1082,7 +1084,7 @@ def test_canvas_action_without_token_returns_actionable_error(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -1154,7 +1156,7 @@ def test_canvas_failure_returns_chat_error(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -1197,7 +1199,7 @@ def test_switching_course_and_back_returns_to_the_original_conversation(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 

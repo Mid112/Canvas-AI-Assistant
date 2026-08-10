@@ -127,7 +127,11 @@ jobs:
     - self-hosted
     - macOS
     - ARM64
-    timeout-minutes: 40
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     steps:
@@ -138,8 +142,8 @@ jobs:
         # Service containers only work on Linux runners. On macOS self-hosted
         # runners, start Postgres via Docker instead.
         run: |
-          NETWORK="ci-net-${{ github.run_id }}"
-          CONTAINER="ci-postgres-${{ github.run_id }}"
+          NETWORK="ci-net-${{ github.run_id }}-${{ matrix.shard }}"
+          CONTAINER="ci-postgres-${{ github.run_id }}-${{ matrix.shard }}"
           docker rm -f "$CONTAINER" 2>/dev/null || true
           # Drop anything still attached (cancelled runs leave orphans), then
           # recreate the network. Reuse if rm fails mid-race.
@@ -202,19 +206,16 @@ jobs:
         # Mac runner of heartbeat (OOM → "lost communication" failures).
         # Quieter pytest + lighter cov report also cut memory/log pressure.
         run: |
-          # Drop orphaned pytest containers from cancelled runs.
-          orphans=$(docker ps -q --filter ancestor="${{ steps.backend_image.outputs.image }}" 2>/dev/null || true)
-          if [ -n "$orphans" ]; then
-            # shellcheck disable=SC2086
-            docker rm -f $orphans >/dev/null 2>&1 || true
-          fi
+          TEST_CONTAINER="ci-backend-test-${{ github.run_id }}-${{ matrix.shard }}"
+          docker rm -f "$TEST_CONTAINER" >/dev/null 2>&1 || true
           docker run --rm \
+            --name "$TEST_CONTAINER" \
             --memory=3g \
             --cpus=2 \
-            --network "ci-net-${{ github.run_id }}" \
+            --network "ci-net-${{ github.run_id }}-${{ matrix.shard }}" \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace/app/backend \
-            -e DATABASE_URL=postgresql+asyncpg://testuser:testpass@ci-postgres-${{ github.run_id }}:5432/testdb \
+            -e DATABASE_URL=postgresql+asyncpg://testuser:testpass@ci-postgres-${{ github.run_id }}-${{ matrix.shard }}:5432/testdb \
             -e ENVIRONMENT=test \
             -e SECRET_KEY=ci-test-secret \
             -e CANVAS_TOKEN_ENCRYPTION_KEY=cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI= \
@@ -222,13 +223,58 @@ jobs:
             -e DEFAULT_LLM_PROVIDER=huggingface \
             -e PYTHONPATH=/workspace/app/backend \
             -e PYTHONUNBUFFERED=1 \
+            -e PYTEST_SHARD_INDEX=${{ matrix.shard }} \
+            -e PYTEST_SHARD_COUNT=2 \
+            -e COVERAGE_FILE=/workspace/.coverage.backend-${{ matrix.shard }} \
             "${{ steps.backend_image.outputs.image }}" \
-            pytest ../../test/backend/ -q -m "not fuzz" --tb=line --cov --cov-report=term
+            pytest ../../test/backend/ -q -m "not fuzz" --tb=short --maxfail=1 --durations=25 --timeout=180 --timeout-method=signal --cov --cov-report=term --cov-fail-under=0
+      - name: Upload shard coverage data
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-${{ matrix.shard }}
+          path: .coverage.backend-${{ matrix.shard }}
+          include-hidden-files: true
+          if-no-files-found: error
       - name: Stop PostgreSQL
         if: always()
         run: |
-          docker rm -f "ci-postgres-${{ github.run_id }}" 2>/dev/null || true
-          docker network rm "ci-net-${{ github.run_id }}" 2>/dev/null || true
+          docker rm -f "ci-backend-test-${{ github.run_id }}-${{ matrix.shard }}" 2>/dev/null || true
+          docker rm -f "ci-postgres-${{ github.run_id }}-${{ matrix.shard }}" 2>/dev/null || true
+          docker network rm "ci-net-${{ github.run_id }}-${{ matrix.shard }}" 2>/dev/null || true
+
+  backend-coverage:
+    runs-on:
+    - self-hosted
+    - macOS
+    - ARM64
+    timeout-minutes: 10
+    needs: backend-test
+    if: needs.backend-test.result == 'success'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download shard coverage data
+        uses: actions/download-artifact@v4
+        with:
+          pattern: backend-coverage-*
+          path: .coverage-artifacts
+          merge-multiple: true
+      - name: Build or reuse backend test image
+        id: backend_image
+        run: |
+          REQ_HASH=$(shasum -a 256 app/backend/requirements.txt | cut -c1-16)
+          IMAGE="ci-backend-test:${REQ_HASH}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            docker build -t "$IMAGE" -f .github/docker/Dockerfile.backend-test app/backend
+          fi
+      - name: Combine coverage and enforce threshold
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace/app/backend \
+            "${{ steps.backend_image.outputs.image }}" \
+            sh -c 'coverage combine /workspace/.coverage-artifacts && coverage report --fail-under=68'
 
   # ── 3. Frontend lint + test ───────────────
   frontend-test:
@@ -449,7 +495,7 @@ jobs:
     - macOS
     - ARM64
     timeout-minutes: 30
-    needs: [backend-lint, backend-test, frontend-test, e2e-test]
+    needs: [backend-lint, backend-test, backend-coverage, frontend-test, e2e-test]
     if: always() && !failure() && !cancelled()
     steps:
       - uses: actions/checkout@v4

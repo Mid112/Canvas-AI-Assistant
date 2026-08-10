@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """Active course preference binds to chat when local_course_id is omitted."""
 
 import uuid
@@ -28,7 +30,7 @@ def test_chat_uses_persisted_active_course_when_local_course_id_omitted(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
 

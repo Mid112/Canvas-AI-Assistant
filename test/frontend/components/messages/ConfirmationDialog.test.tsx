@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ConfirmationDialog } from "@/components/messages/ConfirmationDialog";
+import { getDeliveryAudienceError } from "@/components/messages/messageDelivery";
 
 const recipients = [
   { id: "1", name: "John Smith", email: "john@university.edu" },
@@ -11,6 +12,14 @@ const recipients = [
 ];
 
 describe("ConfirmationDialog", () => {
+  it("shares the private-audience guard used before and during confirmation", () => {
+    expect(getDeliveryAudienceError("private_message", 0)).toMatch(
+      /Select at least one student/i,
+    );
+    expect(getDeliveryAudienceError("private_message", 1)).toBeNull();
+    expect(getDeliveryAudienceError("announcement", 0)).toBeNull();
+  });
+
   it("renders the full subject and body alongside the recipient count", () => {
     render(
       <ConfirmationDialog
@@ -23,6 +32,7 @@ describe("ConfirmationDialog", () => {
         subject="Reminder: assignment due Friday"
         body="Please submit your work before the deadline."
         isSending={false}
+        deliveryMode="private_message"
         onConfirm={vi.fn()}
       />,
     );
@@ -50,6 +60,7 @@ describe("ConfirmationDialog", () => {
         subject="Subject"
         body="Body"
         isSending={false}
+        deliveryMode="private_message"
         onConfirm={onConfirm}
       />,
     );
@@ -73,6 +84,7 @@ describe("ConfirmationDialog", () => {
         subject="Subject"
         body="Body"
         isSending={false}
+        deliveryMode="announcement"
         onConfirm={onConfirm}
       />,
     );
@@ -86,6 +98,27 @@ describe("ConfirmationDialog", () => {
     );
     await user.click(screen.getByRole("button", { name: "Confirm Send" }));
     expect(onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a private handoff private when all recipients are cleared", () => {
+    render(
+      <ConfirmationDialog
+        open
+        onOpenChange={vi.fn()}
+        recipients={recipients}
+        selectedRecipientIds={new Set()}
+        onToggleRecipient={vi.fn()}
+        onRemoveRecipient={vi.fn()}
+        subject="Subject"
+        body="Body"
+        isSending={false}
+        deliveryMode="private_message"
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("PRIVATE MESSAGE")).toBeInTheDocument();
+    expect(screen.queryByText(/whole course as an announcement/i)).not.toBeInTheDocument();
   });
 
   it("lets the user deselect and remove a recipient from within the dialog", async () => {
@@ -104,6 +137,7 @@ describe("ConfirmationDialog", () => {
         subject="Subject"
         body="Body"
         isSending={false}
+        deliveryMode="private_message"
         onConfirm={vi.fn()}
       />,
     );

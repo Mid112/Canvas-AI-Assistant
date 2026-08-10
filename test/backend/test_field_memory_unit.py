@@ -223,6 +223,7 @@ def test_partial_plan_safe_keys_exclude_raw_ids():
     assert "student_reference" not in _PARTIAL_PLAN_SAFE_KEYS
     assert "new_grade" not in _PARTIAL_PLAN_SAFE_KEYS
     assert "feedback" not in _PARTIAL_PLAN_SAFE_KEYS
+    assert "reason" not in _PARTIAL_PLAN_SAFE_KEYS
     assert "assignment_reference" in _PARTIAL_PLAN_SAFE_KEYS
     assert "title" in _PARTIAL_PLAN_SAFE_KEYS
     assert "due_date" in _PARTIAL_PLAN_SAFE_KEYS
@@ -240,8 +241,8 @@ def test_merge_field_memory_with_partial_plan_safe_keys_strips_ids():
             "assignment_reference": "the latest quiz",
             "student_id": 77777,  # hallucinated
             "student_reference": "999999",  # failed to resolve
-            "new_grade": "85",  # not confirmed
-            "feedback": "good work",  # not confirmed
+            "new_grade": "85",  # must not persist from generic LLM clarify
+            "feedback": "good work",  # must not persist from generic clarify
             "title": "Quiz 1",  # user-provided draft param
             "due_date": "2026-08-04T23:59:00",  # user-provided draft param
         },
@@ -287,6 +288,9 @@ def test_clear_course_scoped_field_memory_removes_entity_refs():
             "assignment_reference": "HW1",
             "student_id": 77,
             "student_reference": "Alex",
+            "new_grade": "85",
+            "feedback": "Good work",
+            "reason": "Reviewed rubric",
             "recent_assignments": [{"id": 42, "name": "HW1"}],
             "recent_students": [{"id": 77, "name": "Alex"}],
             "grounded_facts": {"ids": [42, 77], "names": ["hw1"], "grades": [], "dates": []},
@@ -299,6 +303,9 @@ def test_clear_course_scoped_field_memory_removes_entity_refs():
     assert "assignment_reference" not in memory
     assert "student_id" not in memory
     assert "student_reference" not in memory
+    assert "new_grade" not in memory
+    assert "feedback" not in memory
+    assert "reason" not in memory
     assert "recent_assignments" not in memory
     assert "recent_students" not in memory
     assert "grounded_facts" not in memory

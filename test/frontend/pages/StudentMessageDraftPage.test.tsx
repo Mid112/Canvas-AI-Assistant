@@ -105,9 +105,7 @@ describe("StudentMessageDraftPage", () => {
     );
     expect(screen.getByText("John Smith")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "No students selected — this will be a public course announcement.",
-      ),
+      screen.getByText("No students selected — this will be a public course announcement."),
     ).toBeInTheDocument();
     expect(screen.getByText("Assignment Reminder")).toBeInTheDocument();
   });
@@ -186,9 +184,7 @@ describe("StudentMessageDraftPage", () => {
     await screen.findByLabelText("Subject");
     await user.click(screen.getByRole("checkbox", { name: /John Smith/i }));
 
-    expect(
-      screen.getByText("1 student selected — private message"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("1 student selected — private message")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Send" }));
     expect(await screen.findByRole("dialog")).toHaveTextContent("1 student");
@@ -297,9 +293,7 @@ describe("StudentMessageDraftPage", () => {
     // Course announcements are intentionally sendable with zero selected
     // students because Canvas handles delivery at the course scope.
     expect(
-      await screen.findByText(
-        "No students selected — this will be a public course announcement.",
-      ),
+      await screen.findByText("No students selected — this will be a public course announcement."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
   });

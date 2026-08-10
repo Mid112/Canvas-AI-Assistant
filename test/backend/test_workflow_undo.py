@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """Tests for POST /history/workflows/{id}/undo — Feature D (undo action).
 Scoped to update_assignment (re-applies prior state) and create_assignment
 (deletes the created assignment); send_message is not undoable (see
@@ -65,7 +67,7 @@ def client():
         yield c
 
 
-def _register_with_canvas(client) -> tuple[dict, int]:
+def _register_with_canvas(client, *, token_suffix: str = "") -> tuple[dict, int]:
     """Register a fresh instructor, connect Canvas, seed one course, and
     set it active — the active-course PATCH also seeds canvas_course_names
     (see set_active_course's sync_courses_if_stale call), which is what
@@ -83,7 +85,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token() + token_suffix, "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -611,7 +613,7 @@ def test_undo_scoped_to_owning_user(client):
         client, headers_a, local_course_id_a
     )
 
-    headers_b, _ = _register_with_canvas(client)
+    headers_b, _ = _register_with_canvas(client, token_suffix="-second")
     response = client.post(f"/api/v1/history/workflows/{workflow_id}/undo", headers=headers_b)
     assert response.status_code == 404
 

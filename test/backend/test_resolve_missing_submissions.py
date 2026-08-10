@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """Tests for resolve_missing_submissions and the ResolvedSet handle it
 produces (see compute_missing_submissions/create_resolved_set/
 materialize_resolved_set in app/backend/app/services/resolved_set.py, and
@@ -36,7 +38,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
 

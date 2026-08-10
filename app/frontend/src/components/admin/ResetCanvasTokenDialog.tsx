@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -115,9 +116,7 @@ export function ResetCanvasTokenDialog({
             />
           </div>
           {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
+            <ErrorAlert message={error} />
           ) : null}
         </div>
 

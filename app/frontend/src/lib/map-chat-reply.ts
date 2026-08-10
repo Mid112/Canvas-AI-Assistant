@@ -113,8 +113,14 @@ function joinAcknowledgements(
 }
 
 function formatClarificationQuestion(question: string): string {
+  // Only replace schema-shaped snake_case tokens. Rewriting ordinary words
+  // such as "title", "subject", or "body" corrupts otherwise natural LLM
+  // prose (and can assign the wrong workflow-specific label).
+  const internalFieldKeys = Object.keys(CLARIFICATION_FIELD_LABELS).filter(
+    (field) => field.includes("_"),
+  );
   const internalFieldPattern = new RegExp(
-    `\\b(?:${Object.keys(CLARIFICATION_FIELD_LABELS).join("|")})\\b`,
+    `\\b(?:${internalFieldKeys.join("|")})\\b`,
     "g",
   );
   const normalizedQuestion = question.replace(
@@ -155,13 +161,16 @@ function formatSafeValue(value: unknown): string | undefined {
 
 function readableFields(
   value: unknown,
+  excludedFields: ReadonlySet<string> = new Set(),
 ): Array<{ label: string; value: string }> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return [];
   }
 
   return Object.entries(value as Record<string, unknown>)
-    .filter(([field]) => !INTERNAL_FIELDS.has(field))
+    .filter(
+      ([field]) => !INTERNAL_FIELDS.has(field) && !excludedFields.has(field),
+    )
     .flatMap(([field, fieldValue]) => {
       const formatted = formatSafeValue(fieldValue);
       return formatted
@@ -181,6 +190,11 @@ function readNumberArray(value: unknown): number[] | undefined {
     .map((entry) => (typeof entry === "number" ? entry : Number(entry)))
     .filter((entry) => Number.isFinite(entry));
   return numbers.length > 0 ? numbers : undefined;
+}
+
+function readStringSet(value: unknown): ReadonlySet<string> {
+  if (!Array.isArray(value)) return new Set();
+  return new Set(value.filter((entry): entry is string => typeof entry === "string"));
 }
 
 function readNumber(value: unknown): number | undefined {
@@ -661,13 +675,11 @@ function buildQuizCreateDraftState(
 }
 
 function buildQuizCreateNavigateTo(
-  proposed: Record<string, unknown>,
-  conversationId?: number,
-  timeZone?: string,
+  draftState: Record<string, unknown>,
 ): NonNullable<AssistantResponse["navigateTo"]> {
   return {
     path: paths.instructor.quizCreate,
-    state: buildQuizCreateDraftState(proposed, conversationId, timeZone),
+    state: draftState,
   };
 }
 
@@ -784,15 +796,12 @@ function buildFeedbackDraftNavigateTo(
 function buildQuizCreateFormAction(
   proposed: Record<string, unknown>,
   previewMetadata: Record<string, unknown> | undefined,
-  conversationId?: number,
-  timeZone?: string,
+  draftState: Record<string, unknown>,
 ): NonNullable<AssistantResponse["interpretedAction"]> {
   const courseLabel =
     readString(previewMetadata?.course_name) ??
     readString(previewMetadata?.course) ??
     "Active course";
-  const draftState = buildQuizCreateDraftState(proposed, conversationId, timeZone);
-
   return {
     action: "Create Quiz",
     course: courseLabel,
@@ -950,18 +959,23 @@ function mapReplyBody(
     // keeps an "Open quiz creation form" button so reopening chat history
     // can return to the seeded form without a confirmable preview panel.
     if (proposed?.action === "create_quiz") {
+      const quizDraftState = buildQuizCreateDraftState(
+        proposed,
+        conversationId,
+        timeZone,
+      );
       return {
         content:
           readString(reply.summary) ??
-          "Opening the quiz creation form with your draft…",
+          "I prepared a quiz draft — open the form to review it.",
         explanation:
           "Quiz creation happens in the dedicated form so the write is reviewed once and recorded in workflow history.",
-        navigateTo: buildQuizCreateNavigateTo(proposed, conversationId, timeZone),
+        autoNavigate: false,
+        navigateTo: buildQuizCreateNavigateTo(quizDraftState),
         interpretedAction: buildQuizCreateFormAction(
           proposed,
           previewMetadata,
-          conversationId,
-          timeZone,
+          quizDraftState,
         ),
       };
     }
@@ -1044,11 +1058,24 @@ function mapReplyBody(
   }
 
   if (reply.action === "clarify" || reply.clarify) {
-    const acknowledgedFields = readableFields(reply.partial_plan);
-    const acknowledgedEntries =
+    const unresolvedFields = readStringSet(reply.unresolved_fields);
+    const partialPlan =
       reply.partial_plan && typeof reply.partial_plan === "object"
-        ? Object.entries(reply.partial_plan as Record<string, unknown>)
-            .filter(([field]) => !INTERNAL_FIELDS.has(field))
+        ? (reply.partial_plan as Record<string, unknown>)
+        : {};
+    const displayExcludedFields = new Set(unresolvedFields);
+    const acknowledgedFields = readableFields(
+      partialPlan,
+      displayExcludedFields,
+    );
+    const acknowledgedEntries =
+      Object.keys(partialPlan).length > 0
+        ? Object.entries(partialPlan)
+            .filter(
+              ([field]) =>
+                !INTERNAL_FIELDS.has(field) &&
+                !displayExcludedFields.has(field),
+            )
             .flatMap(([field, value]) => {
               const formatted = formatSafeValue(value);
               return formatted ? [{ field, value: formatted }] : [];
@@ -1069,7 +1096,7 @@ function mapReplyBody(
         "Could you share a bit more detail so I can help?",
     );
     const interpretedAction = buildGradeClarifyHandoffAction(
-      reply.partial_plan as Record<string, unknown> | undefined,
+      partialPlan,
     );
     if (interpretedAction) {
       return {

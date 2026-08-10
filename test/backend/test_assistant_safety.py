@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """
 Assistant safety coverage (#710).
 
@@ -38,7 +40,7 @@ def _register_with_course(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
     canvas_course_id = uuid.uuid4().int % 10_000_000

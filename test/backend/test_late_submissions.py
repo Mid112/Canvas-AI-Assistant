@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 import uuid
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -85,10 +87,7 @@ def auth_headers(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         connected = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={
-                "canvas_token": f"test-canvas-token-{uuid.uuid4()}",
-                "canvas_url": CANVAS_URL,
-            },
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
     assert connected.status_code == 200, connected.text

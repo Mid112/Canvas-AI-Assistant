@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 import uuid
 import asyncio
 from datetime import UTC, datetime, timedelta
@@ -35,8 +37,6 @@ def test_register(client):
 
 
 # Verifies: Login.
-@pytest.mark.requirement("FR1.1")
-@pytest.mark.requirement("UR2.1")
 def test_login(client):
     email = f"test_{uuid.uuid4()}@example.com"
     client.post(
@@ -52,8 +52,6 @@ def test_login(client):
 
 
 # Verifies: Login wrong password.
-@pytest.mark.requirement("FR1.1")
-@pytest.mark.requirement("UR2.1")
 def test_login_wrong_password(client):
     email = f"test_{uuid.uuid4()}@example.com"
     client.post(
@@ -68,8 +66,6 @@ def test_login_wrong_password(client):
 
 
 # Verifies: Expired session rejected.
-@pytest.mark.requirement("FR1.10")
-@pytest.mark.requirement("UR2.1")
 def test_expired_session_rejected(client):
     """#590 — expired DB sessions are rejected even when the JWT is still valid."""
     email = f"test_{uuid.uuid4()}@example.com"
@@ -234,40 +230,8 @@ def test_set_canvas_token(client):
     assert client.get("/api/v1/auth/me", headers=headers).json()["has_canvas_token"] is True
 
 
-# Verifies FR1.7: once submitted, the token is write-only. The endpoints that
-# report on a connection say *whether* one exists, never what it is — so the
-# plaintext must not appear anywhere in their responses, at any nesting depth.
-# Scanning the raw body rather than named fields is deliberate: a future schema
-# change that adds a token field would slip past a field-by-field assertion.
-@pytest.mark.requirement("FR1.7")
-@pytest.mark.requirement("FR10.2")
-@pytest.mark.requirement("UR2.2")
-def test_stored_canvas_token_is_never_returned_to_the_user(client):
-    email = f"test_{uuid.uuid4()}@example.com"
-    canvas_token = f"never-echo-me-{uuid.uuid4()}"
-    reg = client.post(
-        "/api/v1/auth/register",
-        json={"email": email, "password": "Secret123!", "name": "Test User"},
-    )
-    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
-
-    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        submit = client.patch(
-            "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": canvas_token, "canvas_url": CANVAS_URL},
-            headers=headers,
-        )
-    assert submit.status_code == 200, submit.text
-
-    # The response to the submission itself, and every later read of the
-    # profile — the connection is confirmed to exist, so a leak would show up.
-    for response in (submit, client.get("/api/v1/auth/me", headers=headers)):
-        assert response.json()["has_canvas_token"] is True
-        assert canvas_token not in response.text
-
-
-# Verifies: The same Canvas token cannot be connected to another instructor,
-# even when the second instructor uses a different Canvas URL.
+# Verifies: The same Canvas token cannot be connected to another instructor
+# within the same Canvas institution.
 @pytest.mark.requirement("FR1.9")
 @pytest.mark.requirement("UR2.2")
 def test_set_canvas_token_rejects_token_already_used_by_another_instructor(client):
@@ -295,7 +259,7 @@ def test_set_canvas_token_rejects_token_already_used_by_another_instructor(clien
             "/api/v1/auth/me/canvas-token",
             json={
                 "canvas_token": shared_token,
-                "canvas_url": "https://canvas.other.example.edu",
+                "canvas_url": CANVAS_URL,
             },
             headers=second_headers,
         )
@@ -305,160 +269,102 @@ def test_set_canvas_token_rejects_token_already_used_by_another_instructor(clien
     assert second_response.json()["detail"] == "This Canvas token is already in use."
 
 
-def _count_connections_for_token(plain_token: str) -> int:
-    """How many rows actually hold this token, read straight from the database.
-
-    The HTTP status alone cannot prove the requirement: a handler could return
-    409 and still have written a row, or return 200 having written none. This
-    counts by fingerprint and falls back to decrypting rows that predate the
-    fingerprint column, so it sees duplicates either way.
-    """
-    from cryptography.fernet import InvalidToken
-
-    from app.core.security import decrypt_canvas_token, fingerprint_canvas_token
-    from app.models.canvas_connection import CanvasConnection
-
-    target = fingerprint_canvas_token(plain_token)
-
-    async def _count() -> int:
-        engine = create_async_engine(settings.DATABASE_URL)
-        try:
-            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
-                rows = (await db.scalars(select(CanvasConnection))).all()
-                total = 0
-                for row in rows:
-                    if row.token_fingerprint == target:
-                        total += 1
-                        continue
-                    if row.token_fingerprint is not None:
-                        continue
-                    try:
-                        legacy = decrypt_canvas_token(row.encrypted_token)
-                    except InvalidToken:
-                        continue
-                    if fingerprint_canvas_token(legacy) == target:
-                        total += 1
-                return total
-        finally:
-            await engine.dispose()
-
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(_count())
-    finally:
-        loop.close()
-
-
-# Verifies FR1.9 for the ordinary case the other test skips: two instructors on
-# the SAME Canvas site. The existing test uses two different canvas_urls, which
-# leaves the most likely real-world collision — two colleagues at one school
-# pasting the same token — unproven.
-@pytest.mark.requirement("FR1.9")
-@pytest.mark.requirement("UR2.2")
-def test_same_canvas_url_cannot_reuse_another_instructors_token(client):
-    shared_token = f"shared-same-url-{uuid.uuid4()}"
-    headers = []
-    for name in ("First", "Second"):
-        reg = client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": f"test_{uuid.uuid4()}@example.com",
-                "password": "Secret123!",
-                "name": f"{name} User",
-            },
-        )
-        headers.append({"Authorization": f"Bearer {reg.json()['access_token']}"})
+# Verifies: Canvas token uniqueness is scoped to the Canvas institution.
+def test_set_canvas_token_allows_same_token_on_different_canvas_institutions(client):
+    first_email = f"test_{uuid.uuid4()}@example.com"
+    second_email = f"test_{uuid.uuid4()}@example.com"
+    first = client.post(
+        "/api/v1/auth/register",
+        json={"email": first_email, "password": "Secret123!", "name": "First User"},
+    )
+    second = client.post(
+        "/api/v1/auth/register",
+        json={"email": second_email, "password": "Secret123!", "name": "Second User"},
+    )
+    first_headers = {"Authorization": f"Bearer {first.json()['access_token']}"}
+    second_headers = {"Authorization": f"Bearer {second.json()['access_token']}"}
+    shared_token = f"cross-institution-token-{uuid.uuid4()}"
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         first_response = client.patch(
             "/api/v1/auth/me/canvas-token",
             json={"canvas_token": shared_token, "canvas_url": CANVAS_URL},
-            headers=headers[0],
+            headers=first_headers,
         )
         second_response = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": shared_token, "canvas_url": CANVAS_URL},
-            headers=headers[1],
+            json={
+                "canvas_token": shared_token,
+                "canvas_url": "https://canvas.other.example.edu",
+            },
+            headers=second_headers,
+        )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+
+# Verifies: Re-submitting the same token for the same connection is an upsert.
+def test_set_canvas_token_allows_same_token_resubmission(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "Secret123!", "name": "Repeat User"},
+    )
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    same_token = f"same-canvas-token-{uuid.uuid4()}"
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        first_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": same_token, "canvas_url": CANVAS_URL},
+            headers=headers,
+        )
+        second_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": same_token, "canvas_url": CANVAS_URL},
+            headers=headers,
+        )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert len(second_response.json()["canvas_connections"]) == 1
+
+
+# Verifies: Local Docker aliases resolve to one Canvas institution.
+def test_set_canvas_token_rejects_local_canvas_alias_collision(client):
+    first_email = f"test_{uuid.uuid4()}@example.com"
+    second_email = f"test_{uuid.uuid4()}@example.com"
+    first = client.post(
+        "/api/v1/auth/register",
+        json={"email": first_email, "password": "Secret123!", "name": "Local One"},
+    )
+    second = client.post(
+        "/api/v1/auth/register",
+        json={"email": second_email, "password": "Secret123!", "name": "Local Two"},
+    )
+    first_headers = {"Authorization": f"Bearer {first.json()['access_token']}"}
+    second_headers = {"Authorization": f"Bearer {second.json()['access_token']}"}
+    shared_token = f"local-alias-token-{uuid.uuid4()}"
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        first_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": shared_token, "canvas_url": "http://localhost:3000"},
+            headers=first_headers,
+        )
+        second_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": shared_token, "canvas_url": "http://canvas_lms:3000"},
+            headers=second_headers,
         )
 
     assert first_response.status_code == 200
     assert second_response.status_code == 409
     assert second_response.json()["detail"] == "This Canvas token is already in use."
-    # The requirement is about stored state, not about the status code.
-    assert _count_connections_for_token(shared_token) == 1
-
-
-# Verifies FR1.9 end to end through the OTHER write path. An admin resetting an
-# instructor's token bypasses /auth/me entirely, so the guard has to hold in
-# app/services/admin.py as well — a rule enforced in only one of two writers is
-# not enforced at all.
-@pytest.mark.requirement("FR1.9")
-@pytest.mark.requirement("UR2.2")
-def test_admin_cannot_reset_an_instructor_onto_an_in_use_token(
-    client, admin_credentials
-):
-    shared_token = f"shared-admin-path-{uuid.uuid4()}"
-
-    owner = client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": f"test_{uuid.uuid4()}@example.com",
-            "password": "Secret123!",
-            "name": "Token Owner",
-        },
-    )
-    owner_headers = {"Authorization": f"Bearer {owner.json()['access_token']}"}
-    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        claim = client.patch(
-            "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": shared_token, "canvas_url": CANVAS_URL},
-            headers=owner_headers,
-        )
-    assert claim.status_code == 200, claim.text
-
-    admin_login = client.post(
-        "/api/v1/auth/admin/login",
-        json={
-            "email": admin_credentials["email"],
-            "password": admin_credentials["password"],
-        },
-    )
-    assert admin_login.status_code == 200, admin_login.text
-    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
-
-    created = client.post(
-        "/api/v1/admin/instructors",
-        json={
-            "name": "Other Instructor",
-            "email": f"test_{uuid.uuid4()}@example.com",
-            "password": "Secret123!",
-        },
-        headers=admin_headers,
-    )
-    assert created.status_code == 201, created.text
-    other_id = created.json()["id"]
-
-    with (
-        patch("app.integrations.canvas.validate_token", new_callable=AsyncMock),
-        patch(
-            "app.services.canvas_timezone.fetch_canvas_time_zone",
-            new=AsyncMock(return_value=None),
-        ),
-    ):
-        response = client.patch(
-            f"/api/v1/admin/instructors/{other_id}/canvas-token",
-            json={"canvas_token": shared_token, "canvas_url": CANVAS_URL},
-            headers=admin_headers,
-        )
-
-    assert response.status_code == 409, response.text
-    assert response.json()["detail"] == "This Canvas token is already in use."
-    assert _count_connections_for_token(shared_token) == 1
 
 
 # Verifies: Validate canvas token.
-@pytest.mark.requirement("FR1.6")
-@pytest.mark.requirement("UR2.2")
 def test_validate_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
@@ -471,7 +377,7 @@ def test_validate_canvas_token(client):
     ):
         resp = client.post(
             "/api/v1/auth/me/canvas-token/validate",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -483,7 +389,7 @@ def test_validate_canvas_token(client):
 def test_validate_canvas_token_requires_auth(client):
     resp = client.post(
         "/api/v1/auth/me/canvas-token/validate",
-        json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
+        json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
     )
     assert resp.status_code == 401
 
@@ -511,7 +417,7 @@ def test_validate_canvas_token_requires_canvas_url(client):
 
     resp = client.post(
         "/api/v1/auth/me/canvas-token/validate",
-        json={"canvas_token": f"test-token-{uuid.uuid4()}"},
+        json={"canvas_token": unique_canvas_token()},
         headers=headers,
     )
 
@@ -539,8 +445,6 @@ def test_set_canvas_token_second_school(client):
 
 
 # Verifies: Set canvas token upsert same school.
-@pytest.mark.requirement("FR1.4")
-@pytest.mark.requirement("UR2.3")
 def test_set_canvas_token_upsert_same_school(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
@@ -566,7 +470,6 @@ def test_set_canvas_token_upsert_same_school(client):
 
 
 # Verifies: Set canvas token invalid returns 422.
-@pytest.mark.requirement("FR1.6")
 def test_set_canvas_token_invalid_returns_422(client):
     from fastapi import HTTPException
 
@@ -668,8 +571,6 @@ def test_non_debug_allows_localhost_http_url(client, monkeypatch):
 
 
 # Verifies: Delete canvas connection.
-@pytest.mark.requirement("FR1.4")
-@pytest.mark.requirement("UR2.3")
 def test_delete_canvas_connection(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
@@ -700,7 +601,6 @@ def test_delete_canvas_connection_not_found(client):
 
 
 # Verifies: Delete canvas connection wrong user.
-@pytest.mark.requirement("FR1.9")
 def test_delete_canvas_connection_wrong_user(client):
     email_a = f"test_{uuid.uuid4()}@example.com"
     email_b = f"test_{uuid.uuid4()}@example.com"
@@ -719,3 +619,184 @@ def test_delete_canvas_connection_wrong_user(client):
     connection_id = resp.json()["canvas_connections"][0]["id"]
 
     assert client.delete(f"/api/v1/auth/me/canvas-connections/{connection_id}", headers=headers_b).status_code == 404
+
+
+# Verifies FR1.7: once submitted, the token is write-only. The endpoints that
+# report on a connection say *whether* one exists, never what it is — so the
+# plaintext must not appear anywhere in their responses, at any nesting depth.
+# Scanning the raw body rather than named fields is deliberate: a future schema
+# change that adds a token field would slip past a field-by-field assertion.
+@pytest.mark.requirement("FR1.7")
+@pytest.mark.requirement("FR10.2")
+@pytest.mark.requirement("UR2.2")
+def test_stored_canvas_token_is_never_returned_to_the_user(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    canvas_token = f"never-echo-me-{uuid.uuid4()}"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "Secret123!", "name": "Test User"},
+    )
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        submit = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": canvas_token, "canvas_url": CANVAS_URL},
+            headers=headers,
+        )
+    assert submit.status_code == 200, submit.text
+
+    # The response to the submission itself, and every later read of the
+    # profile — the connection is confirmed to exist, so a leak would show up.
+    for response in (submit, client.get("/api/v1/auth/me", headers=headers)):
+        assert response.json()["has_canvas_token"] is True
+        assert canvas_token not in response.text
+
+def _count_connections_for_token(plain_token: str) -> int:
+    """How many rows actually hold this token, read straight from the database.
+
+    The HTTP status alone cannot prove the requirement: a handler could return
+    409 and still have written a row, or return 200 having written none. This
+    counts by fingerprint and falls back to decrypting rows that predate the
+    fingerprint column, so it sees duplicates either way.
+    """
+    from cryptography.fernet import InvalidToken
+
+    from app.core.security import decrypt_canvas_token, fingerprint_canvas_token
+    from app.models.canvas_connection import CanvasConnection
+
+    target = fingerprint_canvas_token(plain_token)
+
+    async def _count() -> int:
+        engine = create_async_engine(settings.DATABASE_URL)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                rows = (await db.scalars(select(CanvasConnection))).all()
+                total = 0
+                for row in rows:
+                    if row.token_fingerprint == target:
+                        total += 1
+                        continue
+                    if row.token_fingerprint is not None:
+                        continue
+                    try:
+                        legacy = decrypt_canvas_token(row.encrypted_token)
+                    except InvalidToken:
+                        continue
+                    if fingerprint_canvas_token(legacy) == target:
+                        total += 1
+                return total
+        finally:
+            await engine.dispose()
+
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(_count())
+    finally:
+        loop.close()
+
+
+# Verifies FR1.9 for the ordinary case the other test skips: two instructors on
+# the SAME Canvas site. The existing test uses two different canvas_urls, which
+# leaves the most likely real-world collision — two colleagues at one school
+# pasting the same token — unproven.
+@pytest.mark.requirement("FR1.9")
+@pytest.mark.requirement("UR2.2")
+def test_same_canvas_url_cannot_reuse_another_instructors_token(client):
+    shared_token = f"shared-same-url-{uuid.uuid4()}"
+    headers = []
+    for name in ("First", "Second"):
+        reg = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": f"test_{uuid.uuid4()}@example.com",
+                "password": "Secret123!",
+                "name": f"{name} User",
+            },
+        )
+        headers.append({"Authorization": f"Bearer {reg.json()['access_token']}"})
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        first_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": shared_token, "canvas_url": CANVAS_URL},
+            headers=headers[0],
+        )
+        second_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": shared_token, "canvas_url": CANVAS_URL},
+            headers=headers[1],
+        )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 409
+    assert second_response.json()["detail"] == "This Canvas token is already in use."
+    # The requirement is about stored state, not about the status code.
+    assert _count_connections_for_token(shared_token) == 1
+
+# Verifies FR1.9 end to end through the OTHER write path. An admin resetting an
+# instructor's token bypasses /auth/me entirely, so the guard has to hold in
+# app/services/admin.py as well — a rule enforced in only one of two writers is
+# not enforced at all.
+@pytest.mark.requirement("FR1.9")
+@pytest.mark.requirement("UR2.2")
+def test_admin_cannot_reset_an_instructor_onto_an_in_use_token(
+    client, admin_credentials
+):
+    shared_token = f"shared-admin-path-{uuid.uuid4()}"
+
+    owner = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": f"test_{uuid.uuid4()}@example.com",
+            "password": "Secret123!",
+            "name": "Token Owner",
+        },
+    )
+    owner_headers = {"Authorization": f"Bearer {owner.json()['access_token']}"}
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        claim = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": shared_token, "canvas_url": CANVAS_URL},
+            headers=owner_headers,
+        )
+    assert claim.status_code == 200, claim.text
+
+    admin_login = client.post(
+        "/api/v1/auth/admin/login",
+        json={
+            "email": admin_credentials["email"],
+            "password": admin_credentials["password"],
+        },
+    )
+    assert admin_login.status_code == 200, admin_login.text
+    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+
+    created = client.post(
+        "/api/v1/admin/instructors",
+        json={
+            "name": "Other Instructor",
+            "email": f"test_{uuid.uuid4()}@example.com",
+            "password": "Secret123!",
+        },
+        headers=admin_headers,
+    )
+    assert created.status_code == 201, created.text
+    other_id = created.json()["id"]
+
+    with (
+        patch("app.integrations.canvas.validate_token", new_callable=AsyncMock),
+        patch(
+            "app.services.canvas_timezone.fetch_canvas_time_zone",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        response = client.patch(
+            f"/api/v1/admin/instructors/{other_id}/canvas-token",
+            json={"canvas_token": shared_token, "canvas_url": CANVAS_URL},
+            headers=admin_headers,
+        )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "This Canvas token is already in use."
+    assert _count_connections_for_token(shared_token) == 1

@@ -22,6 +22,13 @@ const STYLES = {
     text: "text-amber-900",
     iconColor: "text-amber-600",
   },
+  "canvas-token-conflict": {
+    icon: AlertTriangle,
+    border: "border-amber-300/60",
+    bg: "bg-amber-50",
+    text: "text-amber-900",
+    iconColor: "text-amber-600",
+  },
   "canvas-outage": {
     icon: CloudOff,
     border: "border-amber-300/60",

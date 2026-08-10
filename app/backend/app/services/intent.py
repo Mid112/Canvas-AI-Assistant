@@ -9,6 +9,7 @@ It never resolves or accepts Canvas/local IDs.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.mcp_tools.schemas import SemanticIntentAction
@@ -33,7 +34,7 @@ _FIELD_ALLOWLIST: dict[str, frozenset[str]] = {
     "update_assignment": frozenset(
         {"title", "description", "due_date", "points_possible"}
     ),
-    "update_grade": frozenset({"new_grade", "feedback"}),
+    "update_grade": frozenset({"new_grade", "feedback", "reason"}),
     "send_message": frozenset(
         {
             "subject",
@@ -147,7 +148,13 @@ def normalize_semantic_intent(
     # by resolve_missing_submissions. Preserve the older intent for requests
     # that name a specific assignment, but route an unscoped request to the
     # explicit assignment-status action.
-    if intent.intent == "find_missing_submissions" and not intent.assignment_reference:
+    assignment_reference = (intent.assignment_reference or "").strip().lower()
+    broad_assignment_reference = bool(
+        re.search(r"\b(?:assignments|those|these|all|any)\b", assignment_reference)
+    )
+    if intent.intent == "find_missing_submissions" and (
+        not assignment_reference or broad_assignment_reference
+    ):
         action_name = "find_assignments_by_submission_status"
     needs_course = action_name in _COURSE_REQUIRED_READS or action_name in _FIELD_ALLOWLIST
     if needs_course and local_course_id is None:

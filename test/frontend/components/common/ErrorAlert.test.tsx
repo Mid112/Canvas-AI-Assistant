@@ -24,6 +24,20 @@ describe("ErrorAlert", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows a token-conflict hint without a reconnect action", () => {
+    renderWithRouter(
+      <ErrorAlert message="This Canvas token is already in use." />,
+    );
+
+    expect(
+      screen.getByText("This Canvas token is already in use."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/use a different canvas token/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Reconnect Canvas" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders a generic error with no special action", () => {
     renderWithRouter(<ErrorAlert message="Something went wrong on our end." />);
 

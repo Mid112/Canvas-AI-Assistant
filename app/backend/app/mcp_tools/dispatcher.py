@@ -490,6 +490,7 @@ def _merge_assignment_update(
     change is carried over from the just-fetched current Canvas state."""
     instructor_timezone = get_instructor_canvas_timezone(user, canvas_url)
 
+    due_at: datetime | None
     if action.due_date is not None:
         normalized = _normalize_due_date_for_user(action.due_date, user, canvas_url)
         due_at = parse_due_date(normalized or action.due_date, instructor_timezone)
@@ -698,7 +699,14 @@ async def execute_tool(
             assignment_payload = AssignmentCreate(
                 name=action.title,
                 description=action.description,
-                due_at=due_date,
+                due_at=(
+                    parse_due_date(
+                        due_date,
+                        get_instructor_canvas_timezone(user, course.canvas_url),
+                    )
+                    if due_date is not None
+                    else None
+                ),
                 points_possible=action.points_possible,
             )
             if _mcp_enabled():
@@ -1452,7 +1460,10 @@ async def execute_tool(
             return {
                 "action": "intent_preview",
                 "intent_preview": True,
-                "summary": action.summary,
+                # The server-resolved preview is authoritative for writes.  The
+                # model summary may still describe the pre-correction course (or
+                # otherwise diverge from the fields used by the executor).
+                "summary": preview_metadata.get("summary") or action.summary,
                 "proposed_action": proposed,
                 "preview_metadata": preview_metadata,
             }

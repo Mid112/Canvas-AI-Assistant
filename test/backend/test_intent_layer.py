@@ -1,11 +1,21 @@
 """Unit coverage for the language-facing semantic intent boundary."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from app.mcp_tools.dispatcher import parse_action
 from app.mcp_tools.schemas import SemanticIntentAction
+from app.services.chat import (
+    _CHAINABLE_READ_ACTIONS,
+    _explicit_announcement_request,
+    _explicit_dual_delivery_request,
+    _format_assignment_status_match,
+    _preserve_dual_delivery,
+    _rebase_action_to_course,
+    _resolve_pending_course_correction,
+)
 from app.services.intent import normalize_semantic_intent
 
 
@@ -28,17 +38,24 @@ def test_semantic_read_intent_maps_to_existing_read_action():
     assert parsed.assignment_reference == "this assignment"
 
 
+# A *specific* reference keeps the single-assignment recipient lookup, and
+# carries the natural phrasing and the late/missing category with it.
+#
+# This used to say "those assignments", which the broad-reference check now
+# routes to the course-wide filter instead —  covered by
+# test_plural_assignment_reference_uses_course_wide_status_filter below. Left
+# as it was, the two tests asserted opposite outcomes for the same input.
 def test_semantic_missing_submissions_preserves_natural_reference_and_status():
     intent = SemanticIntentAction(
         intent="find_missing_submissions",
-        assignment_reference="those assignments",
+        assignment_reference="the midterm essay",
         status="late",
     )
 
     normalized = normalize_semantic_intent(intent, local_course_id=22)
 
     assert normalized["action"] == "resolve_missing_submissions"
-    assert normalized["assignment_reference"] == "those assignments"
+    assert normalized["assignment_reference"] == "the midterm essay"
     assert normalized["status"] == "late"
 
 
@@ -123,6 +140,33 @@ def test_unscoped_missing_submissions_becomes_assignment_filter():
     }
 
 
+def test_unscoped_late_submissions_preserves_legacy_status_field():
+    intent = SemanticIntentAction(
+        intent="find_missing_submissions",
+        status="late",
+    )
+
+    normalized = normalize_semantic_intent(intent, local_course_id=22)
+
+    assert normalized == {
+        "action": "find_assignments_by_submission_status",
+        "local_course_id": 22,
+        "status": "late_submissions",
+    }
+
+
+def test_plural_assignment_reference_uses_course_wide_status_filter():
+    intent = SemanticIntentAction(
+        intent="find_missing_submissions",
+        assignment_reference="those assignments",
+    )
+
+    normalized = normalize_semantic_intent(intent, local_course_id=31)
+
+    assert normalized["action"] == "find_assignments_by_submission_status"
+    assert normalized["status"] == "missing_submissions"
+
+
 def test_semantic_write_intent_is_preview_gated_and_allows_partial_draft():
     intent = SemanticIntentAction(
         intent="create_assignment",
@@ -202,6 +246,111 @@ def test_semantic_announcement_removes_private_recipient_fields():
     assert proposed["action"] == "send_message"
     assert "recipient_directives" not in proposed
     assert "broadcast_to_all_students" not in proposed
+
+
+def test_negated_announcement_keeps_private_delivery_language():
+    assert _explicit_announcement_request("make an announcement to the class")
+    assert not _explicit_announcement_request(
+        "don't make this an announcement, just message Student One privately"
+    )
+    assert not _explicit_announcement_request("Don't forget to make an announcement tomorrow")
+
+
+def test_dual_delivery_request_is_distinguished_from_announcement_only():
+    message = "Make an announcement and also privately message Student One"
+    assert _explicit_dual_delivery_request(message)
+    assert _explicit_announcement_request(message)
+
+
+def test_dual_delivery_preserves_recipients_and_marks_public_broadcast():
+    action = parse_action(
+        json.dumps(
+            {
+                "action": "send_message",
+                "local_course_id": 31,
+                "subject": "Update",
+                "body": "Please read this.",
+                "recipient_directives": [
+                    {"student_reference": "Student One", "body": "Please read this."}
+                ],
+            }
+        )
+    )
+
+    preserved = _preserve_dual_delivery(action)
+
+    assert preserved.recipient_directives == action.recipient_directives
+    assert preserved.also_announce_to_class is True
+
+
+def test_submission_status_reads_are_chainable():
+    assert "find_assignments_by_submission_status" in _CHAINABLE_READ_ACTIONS
+
+
+def test_assignment_status_summary_uses_filter_matching_count():
+    assert _format_assignment_status_match(
+        {
+            "assignment_name": "Research Proposal",
+            "submitted_count": 10,
+            "matching_count": 3,
+        }
+    ) == "Research Proposal (3 matching)"
+
+
+def test_course_rebase_drops_old_course_identifiers_but_keeps_references():
+    preview = parse_action(
+        json.dumps(
+            {
+                "action": "intent_preview",
+                "summary": "Send a message",
+                "proposed_action": {
+                    "action": "send_message",
+                    "local_course_id": 499,
+                    "recipient_handle": "rs_old_course",
+                    "recipient_canvas_user_ids": [101],
+                    "recipient_directives": [
+                        {"student_reference": "Student One", "body": "Hello"}
+                    ],
+                },
+            }
+        )
+    )
+
+    rebased = _rebase_action_to_course(preview, 322)
+
+    assert rebased.proposed_action["local_course_id"] == 322
+    assert "recipient_handle" not in rebased.proposed_action
+    assert "recipient_canvas_user_ids" not in rebased.proposed_action
+    assert rebased.proposed_action["recipient_directives"]
+
+
+def test_pending_course_correction_requires_explicit_correction_language():
+    course = SimpleNamespace(
+        name="COSC 322",
+        course=None,
+        local_course_id=322,
+        canvas_course_id=322,
+        canvas_connection_id=1,
+        workflow_state="available",
+        last_seen_at=None,
+        created_at=None,
+    )
+
+    assert (
+        _resolve_pending_course_correction(
+            [course], "No, I meant COSC 322"
+        ).local_course_id
+        == 322
+    )
+    assert _resolve_pending_course_correction(
+        [course], "put this in COSC 322 instead"
+    ).local_course_id == 322
+    assert _resolve_pending_course_correction(
+        [course], "change it to COSC 322"
+    ).local_course_id == 322
+    assert _resolve_pending_course_correction(
+        [course], "Change the assignment title to COSC 322 overview"
+    ) is None
 
 
 def test_semantic_course_required_intent_without_resolved_course_clarifies():

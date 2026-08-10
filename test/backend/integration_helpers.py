@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from canvas_test_utils import unique_canvas_token
+
 import json
 import uuid
 from unittest.mock import AsyncMock, patch
@@ -50,7 +52,7 @@ def connect_canvas_and_sync_course(client: TestClient, headers: dict) -> int:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         patch_resp = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
     assert patch_resp.status_code == 200, patch_resp.json()
