@@ -18,6 +18,7 @@ Use this folder as the entry point for user guides, developer docs, deployment g
 | Final design and analysis report | [Final_Design_and_Analysis_Report.pdf](./Final_Design_and_Analysis_Report.pdf) |
 | Final testing report | [`../testing report/Final_Testing_Report_Detailed.pdf`](../testing%20report/Final_Testing_Report_Detailed.pdf) |
 | Requirements traceability matrix | [Requirements_Traceability_Matrix.pdf](./Requirements_Traceability_Matrix.pdf) |
+| Final presentation deck | [Final_Presentation_Deck.pdf](./Final_Presentation_Deck.pdf) |
 | Demo videos | [`../demo-videos/README.md`](../demo-videos/README.md) |
 
 ## How to run the product
