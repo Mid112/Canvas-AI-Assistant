@@ -656,7 +656,6 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     },
     [
       accessToken,
-      activeCourse?.localId,
       activePendingMessageIds,
       appendAssistantMessage,
       assistantContext,

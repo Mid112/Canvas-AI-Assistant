@@ -83,9 +83,9 @@ export function ConfirmationDialog({
           </div>
           <DialogDescription>
             Review exactly what will be sent to {deliveryText} before confirming.
-            <strong className="block text-foreground">
+            <DeliveryMode>
               {isAnnouncement ? "ANNOUNCEMENT" : "PRIVATE MESSAGE"}
-            </strong>{" "}
+            </DeliveryMode>{" "}
             {isAnnouncement
               ? "This will be visible to everyone in the course."
               : "Uncheck or remove anyone who should not receive a private message."}
