@@ -1,0 +1,1256 @@
+# Weekly Report: 18/5 – 24/5 (May 18 – May 24)
+
+## Timesheet
+
+### Clockify Report
+
+- **19/5 (Tuesday):** Not yet using Clockify – Estimated 3.5 hours
+- **21/5 (Thursday):** Not yet using Clockify – Estimated 1 hour
+- **22/5 (Friday):** Not yet using Clockify – Estimated 3.5 hours
+- **23/5 (Saturday):** Not yet using Clockify – Estimated 30 minutes
+- **24/5 (Sunday):** Not yet using Clockify – Estimated 30 minutes
+
+**Total Estimated: ~10 hours**
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Lecture - Project planning
+- Lecture time covering software engineering practices and brainstorming requirements
+
+### #2: Participated team meeting on Thursday
+- Discussed and reviewed the team charter, agree on basic communication practices going forward
+
+### #3: Requirements Brainstorming & Gathering
+- Participated in team brainstorming sessions to identify and refine functional and non-functional requirements, edge cases, user roles
+- Helped document assumptions, MoScoW, edge cases; edited the requirements document to remove redundancy and better visualization
+
+### #4: Lecture - Design & architecture
+- Lecture covering system architecture styles, diagrams, the Single Responsibility Principle, and testing concepts including verification and validation
+
+---
+
+## Progress Update (since 18/5/2025)
+
+| TASK/ISSUE | STATUS |
+| --- | --- |
+| Joined the team on Clockify | Completed (19/5) |
+| Draft and review group charter PR  | Completed (21/5) |
+| Requirements brainstorming | Completed (23/5) |
+| Project plan writing & editing  | Ongoing (25/5) |
+
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle was spent laying the groundwork for the project. Key achievements included completing the project charter and setting up Clockify for time tracking. Work on the project plan and requirements gathering has also kicked off and will continue into the next cycle.
+
+### Retrospective:
+- Team communication has been going well, with Discord being our usual channel for staying connected and coordinated. The only real friction this cycle came from getting used to Clockify — the initial setup had a small learning curve with integration, but nothing that blocked progress. Looking ahead, there's opportunity to speed up the pace, and putting a more structured team schedule in place will help keep everyone on the same page.
+
+---
+
+## Next Cycle Goals
+- Clockify everytime I contribute to project
+- Finalize and review the project plan
+- Begin the first DFD (Level 0 and Level 1) diagram
+- Create the first UML diagram
+- Set up Docker and all necessary development environments
+
+
+# Cycle 3 Report: May 25-May 28
+
+## Timesheet
+
+### Clockify Report
+
+- **26/5 (Tuesday):** Team meeting –  1 hours
+- **27/5 (Wednesday):** DFD Diagrams – 1.5 hour
+- **28/5 (Thursday):** DFD Diagrams, Slides & Script Checking– Estimated 1.5 hours forget to use clockify
+
+**Total Estimated: ~4 hours**
+
+---
+
+## Current Tasks
+
+### #1: Participated in Team Meeting (Tuesday, 26/5)
+- Met with the team to discuss progress and coordinate upcoming work for the cycle
+<img width="2155" height="88" alt="Screenshot 2026-05-29 104344" src="https://github.com/user-attachments/assets/1b16d5e7-fde0-4754-9065-87b9362f8a43" />
+
+### #2: DFD Diagrams 
+- Began work on the Level 0 and Level 1 Data Flow Diagrams as part of the system design phase
+- Reviewed architecture concepts to inform diagram structure and notation
+<img width="2159" height="94" alt="Screenshot 2026-05-29 104426" src="https://github.com/user-attachments/assets/322a2c85-2019-4e29-a24d-3df7365df314" />
+
+### #3: DFD Diagrams update and scripts checking
+- Updating DFD Diagrams for the project, learn the external entities, processes and DataBase needed
+- Slides checking and Scripts checking
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle shifted from planning into early design work. The team meeting helped align everyone on next steps, and a solid start was made on the DFD diagrams. The project plan continues to progress alongside the design work.
+
+### Retrospective:
+- The transition from requirements gathering to design work went smoothly. Time spent reviewing architecture concepts before diagramming was useful and helped ground the DFDs in the right principles. The main area to push on next cycle is finishing DFD in detail and getting development environments configured so the team is unblocked when coding begins.
+
+---
+
+## Next Cycle Goals
+- Clockify every time I contribute to the project
+- Finalize the project plan
+- Initialize the Level 0/1 DFD diagram
+
+---
+
+# Cycle 4 Report: May 29-June 1
+
+## Timesheet
+
+### Clockify Report
+
+- **29/5 (Friday):** Team meeting –  2.5 hours
+- **29/5 (Friday):** Video presentation –  1.25 hours
+- **30/5 (Saturday):** Team meeting – 0.2 hour
+- **1/6 (Monday):** Review diagrams, update DFD diagrams and system learning – 2 hours
+
+**Total Estimated: ~6 hours**
+
+---
+
+## Completed Tasks
+
+### #1: Participated in Team Meeting (Friday, 29/5 & 30/5)
+- Attended team meetings to discuss project scope, system architecture, and overall design direction.
+- Discussed the interaction between the AI assistant, MCP server, backend services, and Canvas LMS integration.
+<img width="2373" height="82" alt="Screenshot 2026-06-02 102608" src="https://github.com/user-attachments/assets/d04b0225-99b9-418d-8818-0d599a0cdbc6" />
+<img width="2375" height="86" alt="Screenshot 2026-06-02 102602" src="https://github.com/user-attachments/assets/8db3d44f-46ca-4b83-8330-5ab65afc0809" />
+
+
+### #2: Video presentation (Friday, 29/5)
+- Finish script for a 12-minutes video presentation
+- Collaborate with teammate on Zoom for presentating
+<img width="2382" height="188" alt="Screenshot 2026-06-02 102613" src="https://github.com/user-attachments/assets/01960ee4-fd98-4ffc-abe5-8e6daffaf889" />
+
+
+### #3: DFD Diagrams update, system learning, reviews diagrams (Monday, 1/6)
+- Updating DFD Diagrams for the project based on what TA suggested
+- Review use case diagram, wireframe UI
+<img width="2363" height="186" alt="Screenshot 2026-06-02 102621" src="https://github.com/user-attachments/assets/6c78689e-4d6d-43b6-b0e2-f11d055b7f4f" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle focused primarily on system analysis and design activities. Significant progress was made in understanding the architecture of the AI-assisted Canvas management system and translating requirements into visual design artifacts.
+- Working on use cases, DFDs, and wireframes helped establish a clearer understanding of system behavior, data movement, and user interactions before implementation begins.
+
+### Retrospective:
+- The team successfully transitioned from project planning into the system design phase.
+- Creating and refining design artifacts improved communication among team members and helped identify system requirements early.
+- Additional time spent researching architecture concepts and AI system workflows contributed to more accurate and detailed diagrams.
+
+---
+
+## Next Cycle Goals
+- Continue tracking all project contributions using Clockify.
+- Finalize Use Case Diagrams and ensure consistency with project requirements.
+- Complete and refine Level 0 and Level 1 Data Flow Diagrams.
+- Finalize wireframes and validate user workflows.
+- Set up development environments and project infrastructure for implementation.
+- Begin backend and frontend development planning.
+
+---
+
+# Cycle 5 Report: June 2 – June 4
+
+## Timesheet
+
+### Clockify Report
+
+- 2/6 (Tuesday): Team Meeting – 2.5 hours
+- 2/6 (Tuesday): Diagram Finishing – 1.5 hours
+- 4/6 (Thursday): Backend Initialize + Video Recording – 2.5 hours
+
+Total: ~6.5 hours
+
+---
+
+## Completed Tasks
+
+### 1: Participated in Team Meeting (Tuesday, 2/6)
+- Met with the team to discuss the system design presentation, divide recording responsibilities, and coordinate backend and frontend progress after the design video deadline
+<img width="2381" height="101" alt="Screenshot 2026-06-05 095326" src="https://github.com/user-attachments/assets/b78c154a-6500-469c-b31d-cb4753f30e0b" />
+
+
+### 2: Diagram Finishing (Tuesday, 2/6)
+- Completed the remaining DFD diagrams in preparation for the design presentation
+- Reviewed and finalized notation, external entities, processes, and data stores to ensure consistency across Level 0 and Level 1 diagrams
+<img width="2353" height="94" alt="Screenshot 2026-06-05 095331" src="https://github.com/user-attachments/assets/99e7eb32-4df7-4fe7-a78f-6ed5aed5ea22" />
+
+
+### 3: Video Recording + Backend Foundation Setup (Thursday, 4/6)
+- Recorded assigned sections of the system design video presentation
+- Initialized the backend project structure under app/backend/ using FastAPI and PostgreSQL
+<img width="2370" height="92" alt="Screenshot 2026-06-05 095335" src="https://github.com/user-attachments/assets/36cd2798-7210-4a33-9b94-84cd89c63dc8" />
+
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle covered both the design presentation deliverable and the start of active development. Finishing the diagrams early in the cycle allowed the team to move into recording without blockers. The backend foundation is now in place, giving the rest of the team a stable base to build auth-dependent features on top of.
+
+
+### Retrospective:
+- Combining the video recording and backend setup into one session was efficient but dense. 
+- The backend work aligned closely with what the frontend teammate had already scaffolded, which made the API contract straightforward to define. Going forward, keeping closer communication on shared types and endpoint shapes early will reduce integration friction.
+
+---
+
+## Next Cycle Goals
+- Push backend auth PR for team review
+- Write basic auth tests in test/backend/
+- Begin role-specific API routes (/api/instructor/, /api/ta/, /api/admin/)
+
+---
+
+# Cycle 6 Report: June 5 – June 8
+
+## Timesheet
+
+### Clockify Report
+
+- 5/6 (Friday): Team Meeting – 3 hours
+- 7/6 (Saturday): fastAPI set up + authAPI  – 3.9 hours
+- 8/6 (Sunday): Backend Initialize + Video Recording – 4.9 hours
+
+Total: ~11.8 hours
+
+---
+
+## Completed Tasks
+
+### 1: Participated in Team Meeting (Friday, 5/6)
+- Met with the team to discuss the work for demo of proof of life, my part is for backend mostly
+<img width="2211" height="262" alt="Screenshot 2026-06-09 100812" src="https://github.com/user-attachments/assets/a0f0a129-36d8-4242-8b83-6fa8e5cb8b9e" />
+
+
+
+### 2: fastAPI set up + authAPI (Sunday, 7/6)
+- fastAPI basic set up, folder structure for backend made
+- authAPI endpoint set up, JWT token used
+<img width="2202" height="279" alt="Screenshot 2026-06-09 100816" src="https://github.com/user-attachments/assets/be26bb73-e9f0-4e11-88ba-d06dc4e568fa" />
+
+
+
+### 3: PR review and canvasAPI basic set up (S, 4/6)
+- review frontend PRs of others, work on canvasAPI by reading documents
+- implement basic canvasAPI endpoints getsubmission, getcourse,..
+<img width="2200" height="562" alt="Screenshot 2026-06-09 100820" src="https://github.com/user-attachments/assets/c9e28d8c-35fc-45e6-bd49-d4a71cf6f6eb" />
+
+
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle completed the fastAPI foundation, make basic Canvas API and login. The three-layer architecture (integration → service → router) keeps the code organized and will make it straightforward to add more Canvas endpoints when the LLM integration begins. All 13 backend tests pass and the server is confirmed running locally with Docker.
+
+
+### Retrospective:
+- Running frontend and backend PRs in parallel with teammates caused some integration gaps — the signup form doesn't call the backend yet and the name field has no backend counterpart. A quick alignment session with the frontend team before integration week will help avoid rework. The Windows Vitest is still an issue for me to solve
+
+---
+
+## Next Cycle Goals
+- Discuss frontend–backend integration with team: wire up register/login forms to `/api/v1/auth/` endpoints
+- Create refactor/backend-cleanup branch: move `client` fixture to `conftest.py` and do some refactor before integration phase
+
+---
+
+# Cycle 7 Report: June 9 – June 11
+
+## Timesheet
+
+### Clockify Report
+
+- 9/6 (Tuesday): Team Meeting – 2 hours
+- 11/6 (Thursday): Canvas docker + set token endpoint + PR reviews – 9.5 hours
+
+Total: ~11.5 hours
+
+---
+
+## Completed Tasks
+
+### 1: Participated in Team Meeting (Tuesday, 9/6)
+- Met with the team to discuss the work for demo of proof of life, using canvas docker<img 
+
+<img width="1085" height="49" alt="Screenshot 2026-06-12 091002" src="https://github.com/user-attachments/assets/ca001464-f290-41b3-8987-50c8438ff580" />
+
+
+
+### 2: canvas docker + set token endpoint + PR reviews (Thursday, 11/6)
+- set up canvas-docker for testing purpose
+- learning system integration
+- set new endpoint for getting token when sign up
+- review teammates' PRs to be ready for demo proof of life
+
+<img width="1079" height="221" alt="Screenshot 2026-06-12 091006" src="https://github.com/user-attachments/assets/77166369-c46b-42a2-9e4c-ab675e7aeeed" />
+
+
+
+
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle focused on three backend tracks: user identity, per-user Canvas token security, and integration testing setup.
+
+- Auth — name field: Added name to RegisterRequest, User model, and UserResponse so the signup form can capture and store a real display name end-to-end.
+
+- Canvas token endpoint: Implemented the full per-user Canvas token flow — PATCH /api/v1/auth/me/canvas-token validates the token against Canvas (GET /users/self), encrypts it with Fernet symmetric encryption, and stores it per user. All downstream Canvas API calls (/courses, /assignments, /submissions) now decrypt and use the stored token instead of a global config value. Users without a token get a clear 403 before any Canvas call is made.
+
+- Security: Encryption key lives only in .env (gitignored) — never committed. Added root .gitignore after catching .env about to be staged with 26,000 other files.
+
+- Docker: Confirmed full stack running locally — Postgres via Docker, backend on port 8000, frontend on 5173.
+
+
+### Retrospective:
+- The biggest problem we encoutered was the postgres password auth failure that turned out to be a missing .env file after switching branches — gitignored files don't travel with branches, so the port 5433 setting was lost and the backend silently fell back to the default port 5432. Worth documenting for the team: always re-create .env from .env.example when switching to a new branch.
+
+---
+
+## Next Cycle Goals
+- Wire PATCH /me/canvas-token to the frontend CanvasInfoPage — the backend is ready, the page just needs a form and an API call
+- Fix frontend type gaps with teammate: RegisterCredentials missing name, UserResponse missing name and has_canvas_token
+
+---
+
+# Cycle 8 Report: June 12 – June 15
+
+## Timesheet
+
+### Clockify Report
+
+- 12/6 (Friday): Meeting and presentation – 3h 12m
+- 13/6 (Saturday): Feature for role and manage canvas token work – 1h 48m
+- 14/6 (Sunday): Adding test for role – 1h 3m
+- 15/6 (Monday): Team Meeting – 2h 5m
+
+Total: ~8h 9m
+
+---
+
+## Completed Tasks
+
+### 1: Demo Presentation and Team Meeting (Friday, 12/6)
+- Participated in the proof-of-life demo presentation
+- Walked through the working full stack: Postgres via Docker, backend auth endpoints, and frontend register/login flow
+- Discussed with the team the next feature set to tackle for the backend
+  <img width="1087" height="85" alt="Screenshot 2026-06-15 203129" src="https://github.com/user-attachments/assets/7896e5b5-c864-4ab2-8428-3ae486ba1dde" />
+
+
+### 2: Feature for Role and Canvas Token Management (Saturday, 13/6)
+- Started implementing role-based access control on the backend — laying the groundwork for admin and instructor roles
+- Worked on separating role concerns so that an admin can control which users have instructor privileges
+- Continued refining the Canvas token management layer to align with the expanded user model
+<img width="1088" height="79" alt="Screenshot 2026-06-15 203137" src="https://github.com/user-attachments/assets/3575dffc-e7b5-420f-8adc-0c8dd078bac9" />
+
+
+### 3: Adding Tests for Role Feature (Sunday, 14/6)
+- Wrote backend tests covering the new role logic
+- Verified that role-restricted endpoints correctly reject unauthorized users
+<img width="1085" height="83" alt="Screenshot 2026-06-15 203142" src="https://github.com/user-attachments/assets/562c7fc6-aba2-47ad-9d0f-c1044e4c6207" />
+
+
+### 4: Team Meeting (Monday, 15/6)
+- Met with the team to align on feature priorities for the next cycle and plan the backend work 
+<img width="1084" height="83" alt="Screenshot 2026-06-15 203147" src="https://github.com/user-attachments/assets/0a8eeb9e-f1be-4b91-a142-e280940ecc1f" />
+
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle shifted focus from the auth/token foundation built in Cycle 7 toward the next layer: role-based access and a richer user model.
+
+- Demo: The proof-of-life demo on June 12 validated that the full stack is functional end-to-end — register, login, Canvas token storage, and protected API calls all working together.
+
+- Role feature: Started building admin/instructor role separation. The goal is for an admin account to manage which users hold instructor roles, rather than all users sharing the same permissions. This is foundational for the multi-role feature set in Project 3.
+
+- Tests: Added test coverage for the role feature early, following the pattern established in previous cycles — write tests alongside the feature rather than after.
+
+### Retrospective:
+- The cycle stayed focused on moving the backend forward into MVP scope. Role-based access is the most important new constraint to get right early, since it affects every downstream endpoint.
+
+---
+
+## Next Cycle Goals
+- Add more constraints to account registration: enforce password strength, validate email format more strictly, prevent duplicate registrations with clearer error messages
+- Implement admin role: admin users can promote/demote instructor role for other accounts; protect instructor-only endpoints with role checks
+- Expand Canvas API response fields to match the database schema — courses, assignments, and submissions should capture all fields defined in the DB design (e.g., canvas_course_id, canvas_user_id, enrollment state)
+
+---
+
+# Cycle 9 Report: June 16 – June 18
+
+## Timesheet
+
+### Clockify Report
+
+- 16/6 (Tuesday): Meeting with the team – 0h 53m
+- 17/6 (Wednesday): Meeting for coding – 3h 6m
+- 17/6 (Wednesday): Canvas token management endpoints fix – 1h 35m
+- 18/6 (Thursday): Backend token and PR reviews – 1h 35m
+
+Total: 7h 10m
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Tuesday, 16/6)
+- Met with the team to discuss progress and align on priorities for the cycle
+<img width="1118" height="38" alt="Screenshot 2026-06-19 113711" src="https://github.com/user-attachments/assets/857c9781-dea7-4be1-bc26-b05c0dc4201d" />
+
+### 2: Meeting for Coding (Wednesday, 17/6) + Canvas Token Management Endpoints Fix (Wednesday, 17/6)
+- Collaborated with the team on coding direction and implementation decisions for the current sprint
+- Debugged and fixed issues with the Canvas token management endpoints
+- Ensured token storage, validation, and retrieval work correctly end-to-end
+<img width="1121" height="74" alt="Screenshot 2026-06-19 113715" src="https://github.com/user-attachments/assets/e89d8ba4-3e4a-4fab-b775-b20c8965e53c" />
+
+### 4: Backend Token and PR Reviews (Thursday, 18/6)
+- Continued backend token work and refinements
+- Reviewed teammates' PRs and provided feedback
+<img width="1120" height="41" alt="Screenshot 2026-06-19 113719" src="https://github.com/user-attachments/assets/1c7fee70-6428-45f6-84fb-028a22655087" />
+
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle focused on stabilizing the Canvas token management layer and keeping the backend aligned with the frontend integration work happening in parallel. The team meetings helped coordinate cross-team dependencies ahead of the MVP demo phase.
+
+### Retrospective:
+- The Canvas token endpoint fixes took longer than expected due to edge cases in validation and encryption. Closer alignment with the frontend team early in the cycle would have reduced back-and-forth. PR reviews were productive and helped catch integration gaps before they reached main.
+
+---
+
+## Next Cycle Goals
+- Add more constraints to account registration: enforce password strength, validate email format more strictly, prevent duplicate registrations with clearer error messages
+- Implement admin role: admin users can promote/demote instructor role for other accounts; protect instructor-only endpoints with role checks
+- Expand Canvas API response fields to match the database schema — courses, assignments, and submissions should capture all fields defined in the DB design (e.g., canvas_course_id, canvas_user_id, enrollment state)
+
+---
+
+# Cycle 10 Report: June 19 – June 22
+
+## Timesheet
+
+### Clockify Report
+
+- 19/6 (Friday): meeting with the team to review PRs, merge canvas-docker into dev branch - 3 hours
+- 20/6 (Saturday): fix db _init_, remove duplicate import, add userpreference model into db - 1.2 hours
+- 21/6 (Sunday): ORM models and work on canvas integration + schemas - 3.65 hours
+- 22/6 (Monday): Finish canvas retrieve system with unit tests, edge cases handle - 3.5 hours
+Total: 10.7 hours
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting + PR Reviews (Friday, 19/6)
+- Met with the team to review open PRs and coordinate merge order before the MVP demo phase
+- Reviewed and merged the canvas-docker branch into dev to unblock local Canvas API testing
+<img width="652" height="68" alt="Screenshot 2026-06-23 103238" src="https://github.com/user-attachments/assets/1ca16504-d117-45f6-9fca-f6c7e94a52d7" />
+
+### 2: Database Init Fix + UserPreference Model (Saturday, 20/6)
+- Fixed duplicate imports in `models/__init__.py` that were causing SQLAlchemy registration issues
+- Created the `UserPreference` ORM model and added `user_preferences` table to the SQL schema
+- Designed the table with `user_id` as primary key (one row per user) and a nullable FK to `courses` for the active course selection
+<img width="653" height="65" alt="Screenshot 2026-06-23 103242" src="https://github.com/user-attachments/assets/1cec86ee-a42d-44f3-8736-caff75ca3c12" />
+
+### 3: ORM Models + Canvas Integration Layer (Sunday, 21/6)
+- Updated `Conversation` model to restore `course_id` (historical record of which course a chat session belongs to, distinct from active course selection)
+- Added `preferences` one-to-one relationship to `User` with cascade delete
+- Rewrote `integrations/canvas.py` to support RFC 5988 Link header pagination (`_fetch_all_pages`, up to 50 pages) and single retry on Canvas 5xx errors
+- Enriched `CourseResponse` schema with `canvas_id`, `local_id`, `canvas_url`, `term_name`, `start_at`, `end_at`, and `total_students`
+- Added `canvas_url` column to the `courses` table and changed `canvas_course_id UNIQUE` to `UNIQUE(canvas_course_id, instructor_id)` to allow co-instructors on the same Canvas course
+<img width="647" height="100" alt="Screenshot 2026-06-23 103246" src="https://github.com/user-attachments/assets/31f97afd-38fb-4b3c-9752-e22485e8c73b" />
+
+### 4: Canvas Retrieval Service + Tests (Monday, 22/6)
+- Implemented `get_courses` with batch upsert pattern (one IN query + single flush) — no N+1 queries
+- Implemented `get_active_course` and `set_active_course` backed by `user_preferences` with a `joinedload` to avoid a second query for the course name
+- Wired `GET /canvas/active-course` and `PATCH /canvas/active-course` endpoints with DB session injection
+- Wrote 23 integration tests covering response shape, upsert idempotency, term name extraction, error propagation (403/422/502), multi-school token routing, active course round-trip, upsert-overwrites-previous, and cross-user ownership enforcement
+- Fixed a pre-existing auth test that had the wrong expected status code (401 vs 403)
+<img width="656" height="67" alt="Screenshot 2026-06-23 103248" src="https://github.com/user-attachments/assets/f3fbe800-ce70-47c5-b353-64ce156fe27c" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle delivered the full canvas retrieval service — courses are now persisted to a local DB on every sync, and instructors can select and retrieve an active working course. The work also resolved two schema-level design issues (co-instructor uniqueness and missing canvas_url on courses) that would have blocked the AI conversation layer.
+
+### Retrospective:
+- The pagination and retry implementation was straightforward once the Canvas API contract (Link headers, RFC 5988) was understood. The trickier part was the active course storage design — iterating through ALTER TABLE approaches and landing on a separate `user_preferences` table took more back-and-forth than expected. Writing tests before finalising the schema would have caught the canvas_url gap earlier.
+
+---
+
+## Next Cycle Goals
+- Implement the conversation layer: accept a user message, resolve the active course from `user_preferences`, fetch relevant assignments/submissions, and pass context to the LLM
+- Add caching to `GET /canvas/courses` with a `last_synced_at` timestamp so repeated page loads don't hit Canvas on every request
+- Wire up course context to the chat UI so the active course is displayed and selectable from the frontend
+
+---
+
+# Cycle 11 Report: June 23 – June 25
+
+## Timesheet
+
+### Clockify Report
+
+- 23/6 (Tuesday): meeting with the team to review PRs, look over each other parts and understanding - 2.5 hours
+- 24/6 (Wednesday): work on student retrieval service, add test to cover - 2.5 hours
+- 25/6 (Thursday): review PRs, implement assignment retrieval and submission retrieval, update model and database accordingly - 4 hours
+Total: 9 hours
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting + PR Reviews (Tuesday, 23/6)
+- Met with the team to review open PRs and walk through each member's implementation to build shared understanding of the codebase
+- Discussed integration points between the Canvas retrieval layer and the upcoming conversation/context-fetch work
+<img width="478" height="44" alt="Screenshot 2026-06-26 102611" src="https://github.com/user-attachments/assets/b3652a2c-c9a5-4579-b2b6-8cf91d592f06" />
+
+### 2: Student Retrieval Service + Tests (Wednesday, 24/6)
+- Implemented `get_students` service to fetch and upsert enrolled students from Canvas into the local DB
+- Wrote integration tests covering student retrieval, upsert idempotency, and error propagation
+<img width="481" height="64" alt="Screenshot 2026-06-26 102615" src="https://github.com/user-attachments/assets/b2b73492-e130-463e-a516-12917d3228a0" />
+
+### 3: PR Reviews + Assignment & Submission Retrieval (Thursday, 25/6)
+- Reviewed team PRs to validate implementation quality and alignment with the shared data model
+- Implemented assignment retrieval service to fetch course assignments from Canvas and persist them locally
+- Implemented submission retrieval service to fetch per-student submission data for each assignment
+- Updated ORM models and SQL schema to support `assignments` and `submissions` tables
+<img width="479" height="135" alt="Screenshot 2026-06-26 102619" src="https://github.com/user-attachments/assets/2137f8b0-8571-440d-9987-f738ff81862e" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle delivered the student, assignment, and submission retrieval services — the core data layer needed to provide assignment context to the LLM. Combined with the active course selection from the previous cycle, the backend can now resolve a full context snapshot (course → students → assignments → submissions) for any instructor query.
+
+### Retrospective:
+- The scope expanded mid-cycle to include both assignment and submission retrieval, which made Thursday dense but kept the data model cohesive in a single PR. Starting the cycle with a team PR review session was valuable — it surfaced integration points earlier and reduced back-and-forth in later reviews.
+
+---
+
+## Next Cycle Goals
+- Work on completing authAPI, canvasAPI and role-based access control.
+- Add caching to `GET /canvas/courses` with a `last_synced_at` timestamp so repeated page loads don't hit Canvas on every request
+- Wire up course context to the chat UI so the active course is displayed and selectable from the frontend
+
+---
+
+# Cycle 12 Report: June 26 – June 39
+
+## Timesheet
+
+### Clockify Report
+
+- 26/6 (Friday): Team meeting - 2.5 hours
+- 27/6 (Saturday): PRs review — 1.5 hours
+- 28/6 (Sunday): PRs review — 2 hours
+- 29/6 (Monday): implement 3 backend features (authenticationAPI, RBAC permissions, instructor account management) — 7.5 hours
+
+**Total: 13.5 hours**
+
+---
+
+## Completed Tasks
+
+### 1: Team meeting (Friday, 26/6)
+- Meet the team to agree on the next cycle implementation
+<img width="1123" height="63" alt="Screenshot 2026-06-30 124305" src="https://github.com/user-attachments/assets/fefd4f3d-f20c-436f-94b4-3c2adb052d4a" />
+
+### 2: PR Reviews (Saturday–Sunday, 27–28/6)
+- Reviewed open team PRs to validate implementation quality and flag integration issues before merge
+<img width="1123" height="67" alt="Screenshot 2026-06-30 124311" src="https://github.com/user-attachments/assets/a67ff5af-6f45-4d5a-aade-1bf433fd1171" />
+<img width="1121" height="62" alt="Screenshot 2026-06-30 124315" src="https://github.com/user-attachments/assets/0a10bece-d4b6-42e4-8f72-ec0f3441d4af" />
+
+### 3: Admin Authentication API (Monday, 29/6)
+- Embedded role claim in JWT and added `hash_token` utility for secure token storage
+- Added `get_admin_user` dependency with DB session validation to gate admin-only routes
+- Implemented admin login/logout endpoints with audit logging and rate limiting
+- Added admin account seeder and management endpoint, with unit and integration tests for admin authentication
+<img width="1124" height="63" alt="Screenshot 2026-06-30 124319" src="https://github.com/user-attachments/assets/6129c78f-2240-464a-ae19-ea4dd1c0fdf4" />
+
+### 4: RBAC Permissions (Monday, 29/6)
+- Restricted Canvas API endpoints to instructor-only access via `get_instructor_user` dependency
+- Applied the `get_instructor_user` guard to the `list_students` endpoint, fixing a ruff F821 from the prior partial implementation
+- Fixed lint and test failures introduced by the RBAC changes
+
+### 5: Instructor Account Management (Monday, 29/6)
+- Built out instructor account management endpoints and schema updates
+- Added a check for whether the current account user is active before allowing access
+- Fixed tests and ruff issues across the new schema and endpoints
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- The cycle delivered the three backend features planned: authenticationAPI (admin login/JWT roles), RBAC permissions (instructor-only Canvas access), and instructor account management. Merging three parallel feature branches in the same cycle surfaced several integration conflicts that took extra time to resolve.
+
+### Retrospective:
+- Running PR reviews over the weekend before the Monday implementation push helped catch issues early, but merging three sizeable feature branches together still produced lint/test breakage that needed a dedicated cleanup pass on Tuesday. Next time, merge and lint-check each branch individually before combining them.
+
+---
+
+## Next Cycle Goals
+- Add caching to `GET /canvas/courses` with a `last_synced_at` timestamp so repeated page loads don't hit Canvas on every request
+- Wire up course context to the chat UI so the active course is displayed and selectable from the frontend
+- Continue resolving any remaining integration issues between authAPI, RBAC, and instructor account management
+
+---
+
+
+# Cycle 13 Report: June 30 – July 2
+
+## Timesheet
+
+### Clockify Report
+
+- 30/6 (Tuesday): Team meeting & branch integration cleanup — 2.68 hours
+- 1/7 (Wednesday): PR review & requested-changes fixes — 1.37 hours
+- 2/7 (Thursday): implement 2 backend features (missing submissions analysis, late submission analysis) — 3.93 hours
+
+**Total: 7.98 hours**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting & Branch Integration Cleanup (Tuesday, 30/6)
+- Team sync, then closed out the lint/test breakage flagged in Cycle 12's retrospective from merging the authenticationAPI, RBAC, and instructor-account-management branches together
+- Fixed ruff and pytest failures across `feature/submission-retrieval-service` and `feature/llm-vague-message` after their merges
+- Updated `config.py` and `test_canvas.py` to keep both branches green post-merge
+<img width="1118" height="70" alt="Screenshot 2026-07-03 194856" src="https://github.com/user-attachments/assets/9dffb669-844f-455f-bae8-30907ba34d26" />
+
+
+### 2: PR Review & Requested-Changes Fixes (Wednesday, 1/7)
+- Reviewed and addressed reviewer feedback on the RBAC permissions PR
+- Fixed a JWT role-claim staleness bug in `dependencies.py` (role was being enforced from the token claim instead of re-checked against the DB), with regression tests added to `test_permissions.py` and `test_admin_management.py`
+- Added tests for admin auth and admin rate limiting (`test_admin_auth.py`, `test_admin_rate_limit.py`)
+- Added the `GET /admin/instructors` endpoint, service method, and test coverage
+<img width="1118" height="64" alt="Screenshot 2026-07-03 194902" src="https://github.com/user-attachments/assets/4ff83074-fb48-44ee-8bfb-071fd4904e10" />
+
+
+### 3: Missing Submissions Analysis (Thursday, 2/7)
+- Added the analysis schema, endpoint, and service for identifying missing student submissions
+- Added test coverage for the missing-submissions analysis flow
+<img width="1129" height="65" alt="Screenshot 2026-07-03 194845" src="https://github.com/user-attachments/assets/992341e2-f752-4c77-8976-e52ea9cf3a60" />
+
+
+### 4: Late Submission Analysis (Thursday, 2/7)
+- Added the router, schema, and service for late-submission analysis
+- Added test coverage for the late-submission analysis flow
+
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle's actual work diverged from Cycle 12's stated goals (Canvas caching, chat UI course-context wiring) — instead, priority shifted to closing out lingering RBAC/integration issues from Cycle 12 and shipping two new submission-analysis features. Worth flagging that the caching and course-context goals are still outstanding.
+
+### Retrospective:
+- The "merge and lint-check each branch individually" lesson from Cycle 12 wasn't fully applied — Tuesday still required a dedicated cleanup pass after two more branches (`submission-retrieval-service`, `llm-vague-message`) were merged together. This is a recurring pattern worth addressing directly next cycle rather than absorbing as cleanup time after the fact.
+- Addressing PR-requested changes surfaced a real security-relevant bug (JWT role staleness) that wouldn't have been caught without the review — reinforces that the review pass before merging is paying off.
+
+## Next Cycle Goals
+- Resolve the outstanding merge conflicts between `feature/backend-rbac-permissions` and `develop`
+- Carry over from Cycle 12: add caching to `GET /canvas/courses` with a `last_synced_at` timestamp
+- Carry over from Cycle 12: wire up active-course context to the chat UI (note: a frontend `ActiveCourseProvider` has since landed on `frontend-fixes` — check whether this goal is already partially covered before starting new work)
+- Adopt one-branch-at-a-time merging to avoid repeating this cycle's Tuesday cleanup pattern
+
+---
+
+# Cycle 14 Report: July 3 – July 6
+
+## Timesheet
+
+### Clockify Report
+
+- 3/7 (Friday): Meeting (RBAC PR follow-up, merge conflict resolution) – 2h 04m
+- 4/7 (Saturday): PR reviews – 1h 32m
+- 6/7 (Monday): Meeting for finishing MVP – 6h 12m
+
+**Total (clocked): ~9h 48m**
+
+---
+
+## Completed Tasks
+
+### 1: Closed Out the `feature/backend-rbac-permissions` ↔ `develop` Merge Conflict (Friday, 3/7)
+- Resolved the merge-conflict carryover flagged as the top goal from Cycle 13
+- Switched the remaining Canvas endpoint over to the `get_instructor_user` dependency for consistent RBAC enforcement
+- Addressed PR-requested changes in `dependencies.py` (role-guard refactor, ~26/17 lines changed)
+- Fixed lint issues across `app/mcp/server.py`, `conftest.py`, and several test files to get the branch green
+- Merged `origin/develop` into the feature branch, pulling in the frontend's new Canvas-connection URL handling (`useCanvasConnectionUrl`, `canvas-connections.ts`, `institution-canvas.ts`) and instructor-courses page rework
+
+### 2: PR Reviews + Audit Log Merge Cleanup (Saturday, 4/7)
+- Fixed a lint break caused by the `AuditLog` → `AuditLogSession` rename in `services/admin.py`
+- Merged `develop` into `feature/backend-rbac-permissions` again, pulling in the new audit-log table/filter/pagination components and the workflow-history UI (`AuditLogTable`, `AuditLogFilters`, `WorkflowHistoryTable`, etc.)
+- Merged the feature branch's own remote changes back in and updated `test_admin_management.py` / `test_instructor_management.py` to reference `AuditLogSession` instead of the old `AuditLog` model
+
+### 3: MVP Prep — Assignment Uniqueness + Test Coverage Push (Monday, 6/7)
+- Added a DB migration (`008_assignment_unique_per_course.sql`) enforcing one assignment per Canvas assignment ID per course, with matching changes to the `Assignment` model, `services/canvas.py`, and `services/chat.py`
+- Added four new backend test files ahead of the MVP demo: `test_admin_settings.py`, `test_error_handling.py`, `test_message_send_validation.py`, `test_workflow_history.py` (~586 lines of new coverage)
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle closed out the Cycle 13 carryover on day one (the `feature/backend-rbac-permissions`/`develop` conflict) and then pivoted entirely into MVP-crunch mode: assignment-uniqueness constraints, a big backend test push, and a full pass on the message/assignment workflow UI, capped off with an actual hands-on end-to-end verification of the running app ahead of the demo.
+- The manual e2e pass on Tuesday was valuable beyond just "it works" — it surfaced two real environment issues (the `lsof` dependency in `make e2e-up` breaking on Windows, and the dev DB's `seed_admin()` being silently blocked by pytest fixture pollution) that would otherwise have cost demo-day time.
+
+### Retrospective:
+- The `GET /canvas/courses` caching and chat-UI active-course-context goals are now two cycles deep in "carried over" — MVP feature work keeps taking priority, which is the right call this close to the demo, but they should get dedicated time once MVP crunch settles rather than rolling forward again.
+- The dev Postgres database has accumulated a large number of test-fixture users (`admin_<uuid>@test.com`, `newadmin_<uuid>@...`, etc.), which points to `pytest test/backend/` having been run against the shared dev DB (port 5433) instead of an isolated test database at some point. Worth fixing at the root — either point tests at a dedicated/ephemeral DB or add a `make db-reset` step to the test workflow — so this doesn't silently break manual QA again.
+
+## Next Cycle Goals
+- Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) so `seed_admin()` and manual QA aren't blocked by leftover test fixtures
+- Carry over (3rd cycle running): add caching to `GET /canvas/courses` with a `last_synced_at` timestamp
+- Carry over (3rd cycle running): wire up active-course context to the chat UI
+- Revisit `make e2e-up` for Windows compatibility (the `lsof`-based port-freeing step has no Windows/Git-Bash equivalent) or document the manual workaround in the README
+- Address any additional gaps surfaced by the MVP demo walkthrough
+
+
+---
+
+# Cycle 15 Report: July 7 – July 9
+
+## Timesheet
+
+### Clockify Report
+
+- 7/7 (Tuesday): MVP meeting – 3h 15m 45s
+- 8/7 (Wednesday): Requirements meeting + Preparation – 5h 15m 25s
+- 9/7 (Thursday): Adding missing features / sync data in instructor dashboard – 2h 21m 12s
+
+**Total (clocked): ~10h 52m**
+
+---
+
+## Completed Tasks
+
+### 1: MVP Meeting Follow-Up — Assignment Workflow + Duplicate-Send Fix (Tuesday, 7/7)
+- `add fixes for workflow`: reworked `assignmentCreator.ts` (~158 lines restructured), added a new `AssignmentPreviewDialog` component, and extended `InstructorAssignmentCreatePage`/`InstructorDashboardPage` off the back of the MVP meeting's assignment-workflow feedback
+- Touched the LLM safety/parsing layer (`json_extraction.py`, `openai_compatible.py`, `assignment_draft.py`, `dispatcher.py`) in `services/llm` to harden assignment-draft parsing
+- `MVP fixes`: added new `ErrorAlert` and `EditableRecipientList` components, an `InstructorCredentialsDialog`, and reworked `MessageDraftPage`/`MessagePreview`/`MessageToolbar`/`RecipientSummary` for the message-composer flow; backend side picked up matching changes to `chat.py`, `auth.py`, and the LLM parsing layer
+- `fix duplicate send`: added a guard in `ChatWindow.tsx` against double-submitting a chat message, with new test coverage in `ChatWindow.test.tsx`
+<img width="1120" height="63" alt="Screenshot 2026-07-10 102240" src="https://github.com/user-attachments/assets/9258161a-4c51-408a-b2d5-df9a157e8ac9" />
+
+### 2: Requirements Meeting Prep — Porting Fixes into the MVP Integration Branch (Wednesday, 8/7)
+- `Port MVP backend safety/parsing layer + assignment-creation/admin UI`: carried Tuesday's backend safety-layer and admin-UI changes (`InstructorCredentialsDialog`, `InstructorTable`, `ErrorAlert`, `ActiveCourseProvider`, `InstitutionProvider`, `active-course-storage.ts`) onto `integration/mvp-merge`, plus new `error-classification.ts` and `map-chat-reply.ts` helpers, ahead of the requirements meeting
+- `Reconcile message-composer UI: MVP's editable recipients + FBI's send contract`: merged two divergent message-composer implementations — the MVP branch's editable-recipient-list feature and `feature/frontend-backend-int`'s send contract — into one `MessageDraftPage` (net simplification despite heavy churn across `ConfirmationDialog`, `MessagePreview`, `MessageToolbar`, `RecipientSummary`), updating `ConfirmationDialog.test.tsx` and `RecipientSummary.test.tsx` to match
+- `add fixes`: reworked `chat.py` (+168 lines) and simplified `InstructorAssistantPage`, backed by a new 183-line `test_chat_endpoint.py`
+<img width="1121" height="63" alt="Screenshot 2026-07-10 102247" src="https://github.com/user-attachments/assets/8bf747cd-0aac-47a4-85d2-fef020437eae" />
+
+### 3: Instructor Dashboard — Removing Stale Data + Published/Unpublished Course Status (Thursday, 9/7)
+- Worked evening of 9/7 (5:15–7:36 PM); pushed the following morning since the branch wasn't in a clean state to commit until then
+- `Update removing stale data, add published/unpublished status for courses`: `get_instructor_dashboard` and `get_course_overview` now refresh each course's assignment/student mirror from Canvas (concurrently, one DB session per course via `asyncio.gather`) before reading aggregate stats, so a roster or assignment change on Canvas no longer shows stale counts on the dashboard
+- Added course published/unpublished status end-to-end: `types/course.ts`, `types/canvas.ts`, `mapCanvasCourse.ts`, `InstructorCoursesSection.tsx`
+- Simplified `useResolvedInstructorCourse.ts` and `useCanvasInstructorCourses.ts` (~100+ lines removed from each) and added a new `disambiguate-course-labels.ts` util, all with matching new test files (`ActiveCourseSelector.test.tsx`, `ActiveCourseProvider.test.tsx`, `disambiguate-course-labels.test.ts`)
+- `Add additional fixes` + `Fix updated course overview following filtered bar, remove duplicate content on active course in chat UI`: follow-up fixes to `ChatWindow.tsx`, `InstitutionProvider.tsx` (new `institution-context.ts`), `ActiveCourseContextBar.tsx`, and `InstructorCoursesSearch.tsx`/`InstructorCoursesPage.tsx`, removing content that was rendering twice between the active-course context bar and the chat UI
+<img width="1119" height="67" alt="Screenshot 2026-07-10 102255" src="https://github.com/user-attachments/assets/ac0de971-f970-4539-8c94-d470f42c34af" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- Tuesday and Wednesday were dominated by reconciling MVP-branch work with `feature/frontend-backend-int` ahead of the requirements meeting — most of the churn in the message-composer and admin-UI components was integration work (two teams' versions of the same screen), not new features.
+- Thursday's dashboard work made real progress on the Cycle 13/14 carryover goal of wiring up active-course context to the chat UI (`ActiveCourseProvider`/`ActiveCourseContextBar`/`InstitutionProvider` all got touched, and the duplicate active-course content in the chat UI was removed) — this should no longer be treated as a from-scratch carryover next cycle, just cleanup/verification.
+- The `GET /canvas/courses` caching goal was addressed differently than planned: instead of a `last_synced_at`-based cache, the dashboard/course-overview services now do a live concurrent refresh from Canvas on every load. This solves the staleness problem the caching goal was meant to solve, but is the opposite of caching (more Canvas calls, not fewer) — worth deciding deliberately whether to layer caching on top of this or leave it as live-refresh.
+
+### Retrospective:
+- The Thursday evening session wasn't committed until Friday morning — worth pushing work in smaller increments during a session rather than batching it all until the branch is in a demoable state, so Clockify time and git history stay aligned for reporting.
+- Two `fix duplicate send` commits landed with identical diffs (`d89463c`/`f84e394`) from cherry-picking the same fix across branches — harmless here, but a reminder to check `git log --all` for an existing equivalent commit before re-applying a fix on a second branch.
+- The dev Postgres DB reset / isolated test-DB goal from Cycle 14 did not get picked up this cycle — still outstanding.
+
+## Next Cycle Goals
+- Decide whether to add a `last_synced_at` cache on top of the new live-refresh dashboard/course-overview logic, or intentionally leave it as live-refresh
+- Verify the active-course-context-in-chat-UI work from Thursday holds up under the demo walkthrough (no more duplicate content, correct course selected) — treat as verification, not new build
+- Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) so `seed_admin()` and manual QA aren't blocked by leftover test fixtures (carried over from Cycle 14)
+- Revisit `make e2e-up` for Windows compatibility
+
+---
+
+# Cycle 16 Report: July 10 – July 13
+
+## Timesheet
+
+### Clockify Report
+
+- 10/7 (Friday): meeting – 2h 31m
+- 11/7 (Saturday): live testing feature fixes – 3h 25m
+- 12/7 (Sunday): PR reviews + feature adds – 1h 13m
+- 13/7 (Monday): PR reviews, fix PRs before live testing event – 6h 16m (2 entries, 5:35AM–11:33PM)
+
+**Total (clocked): ~13h 25m**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Friday, 10/7)
+- Synced with the team on priorities heading into the live-testing push later in the cycle
+- Wrapped up and pushed the Cycle 15 write-up (`update cycle 15 for bao's log`, `update`) — the dashboard stale-data/published-unpublished work itself was finished and logged under Cycle 15
+
+### 2: Course-Sync Review Findings + Assignment Publish Status (Saturday, 11/7)
+- `Fix course sync review findings; extend published/unpublished to assignments`: addressed PR review feedback on the Cycle 15 dashboard work, then extended the published/unpublished distinction from courses to assignments
+- Added migration `011_course_workflow_state_and_assignment_active.sql` (`courses.workflow_state`, `assignments.is_active`, both self-healing via next Canvas sync) and `012_assignment_published.sql` (`assignments.published`, defaulting `true` so existing rows aren't miscounted as "missing" until their next sync)
+- Reworked `useResolvedInstructorCourse.ts`, `useCanvasInstructorCourses.ts`, `mapCanvasCourse.ts`, `InstructorCoursesSection.tsx`, and the assignment creation/list pages to surface the new published state
+
+
+### 3: PR Reviews + Course Reconciliation Scoping (Sunday, 12/7)
+- Added migration `013_course_synced_at.sql` (`courses.synced_at`) so `set_active_course()` can distinguish a course actually confirmed against a live Canvas response from one merely trusting migration 011's `workflow_state` backfill default — a course with `synced_at IS NULL` is now refused as an active-course selection until a real sync runs
+- Tightened `services/canvas.py`'s reconciliation logic so it only reconciles courses belonging to the Canvas instance actually being synced (a multi-institution instructor's sync against one school can no longer mark another school's courses stale) and `services/dashboard.py` to exclude deleted courses from the aggregate stats
+- Added matching backend test coverage in `test_canvas.py` and `test_instructor_dashboard.py`
+
+### 4: Backend Unit Test Push + PR Merges Before Live Testing (Monday, 13/7)
+- `adding more backend unit tests`: added 10 new unit-test files (~3,000 lines) covering the `admin`, `auth`, `canvas`, `dashboard`, `dispatcher`, `integrations/canvas`, `message_template`, `messages`, and `student` services — closing out service-layer coverage gaps ahead of the live-testing session
+- Resolved a merge conflict in `ChatWindow.tsx` and merged `develop` into `feature/sync-data-published-unpublished-courses` (`resolve merge conflict`, `Merge branch 'develop' into feature/sync-data-published-unpublished-courses`), pulling in the chat-history/intent-preview work teammates had landed on `develop`
+- Opened and merged **PR #1066** (`feature/sync-data-published-unpublished-courses`), landing Saturday's and Sunday's course/assignment-publish-status and reconciliation-scoping work on `develop`
+- Immediately followed up with **PR #1077** (`feature/live-testing-fixes`): `add fix`, `Remove redundant`, `fix lint check error`, `remove unused router/test and banner` — cleanup and lint fixes to get the branch demo-ready
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle closed out the last real gap in the published/unpublished-status feature (extending it from courses to assignments) and the review pass on that PR caught a genuine scoping bug — course reconciliation wasn't accounting for multi-institution instructors, which the new `synced_at` guard and instance-scoped reconciliation in Sunday's commit fixes directly.
+- Monday's ~3,000-line unit test push was a deliberate pre-live-testing hardening pass rather than tied to one feature — closing out service-layer coverage before a live/demo session is a pattern worth repeating ahead of future milestones.
+- Two PRs (#1066, #1077) went from open to merged within the same Monday session, both landing before the live-testing event the timesheet references — the "fix PRs before live testing event" 
+
+### Retrospective:
+- The Monday session again ran past midnight before the branch was demo-ready (PR #1077 merged 01:19 on 14/7) — same pattern flagged in Cycle 15's retro. Worth revisiting whether smaller, more frequent PRs earlier in the week would avoid the recurring late-session crunch before demo/testing events.
+- The dev Postgres DB reset / isolated test-DB goal is now carried over a third straight cycle without being picked up — it isn't blocking feature work directly, but the growing pile of test-fixture users is exactly the kind of thing that silently breaks manual QA and admin seeding when someone least expects it.
+
+
+## Next Cycle Goals
+- Decide on `last_synced_at`/`synced_at`-based caching now that `courses.synced_at` exists for a related purpose (active-course validity) — reconsider whether it can double as the caching signal from Cycle 15's carried-over goal
+- Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) — carried over a fourth cycle now (Cycles 14, 15, 16)
+- Revisit `make e2e-up` for Windows compatibility — carried over from Cycles 14 and 15
+- Follow up on any issues surfaced by the live-testing event itself once it happens
+
+---
+
+# Cycle 17 Report: July 14 – July 16
+
+## Timesheet
+
+### Clockify Report
+
+- 14/7 (Tuesday): meeting for live testing – 4h 10m 35s 
+- 15/7 (Wednesday): Refactor + Figuring out next todo features – 2h 25m 55s 
+
+**Total (clocked): ~6h 36m**
+
+---
+
+## Completed Tasks
+
+### 1: Wrap-up, CI Fix, and Live-Testing Meeting (Tuesday, 14/7)
+- Closed out the overnight tail of Monday's session: the `feature/live-testing-fixes` commits (`add fix`, `Remove redundant`, `fix lint check error`, `remove unused router/test and banner`) merged as **PR #1077** at 01:19 — same continuous session flagged in Cycle 16
+- `add CI fixes`: mounted `db/init` into both CI Postgres containers in `.github/workflows/ci.yml` so the schema actually loads before tests run, and reordered `main.py`'s `lifespan()` so `Base.metadata.create_all()` runs **before** `run_pending_migrations()` — previously backwards, which meant a genuinely fresh database (no tables at all) would fail outright on the first `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration instead of just getting the columns for free from `create_all()`
+- Attended the team's live-testing meeting, 8:10AM–12:20PM (4h10m) — the event PRs #1066 and #1077 were both racing to land before, per Cycle 16
+- Evening: updated the team-level Cycle 16 rollup with corrected hours 
+<img width="1120" height="62" alt="Screenshot 2026-07-17 105523" src="https://github.com/user-attachments/assets/104d549b-e874-4d6b-8043-448e617be04d" />
+
+### 2: Log Cleanup + Cycle 16 Write-Up Merge (Wednesday, 15/7)
+- `Update Bao's log.md` and `Add screenshots`: backfilled real GitHub-hosted screenshot links into the Cycle 16 entries (replacing the placeholder gap flagged when Cycle 16 was first drafted) and finalized wording
+- Opened and merged **PR #1087** (`logs-bao`) into `develop`, landing the Cycle 16 report
+- The "figuring out next todo features" half of this entry isn't reflected in any commit in this window — only the log-documentation work is visible in git history, so that's all that's captured here
+<img width="1123" height="67" alt="Screenshot 2026-07-17 105528" src="https://github.com/user-attachments/assets/061e527e-8082-4528-bf2d-3ddd4062f1e7" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- The CI fix is a direct, concrete win: the migration-ordering bug it fixes (`run_pending_migrations()` before `create_all()`) is the same category of problem as the still-outstanding dev-DB-reset goal from Cycle 14 — a fresh database with no tables should never be a special case that breaks startup, and now it isn't, at least in CI.
+- Tuesday's live-testing meeting was the actual event Cycles 15 and 16's "before live testing" timesheet entries were racing toward — worth checking next cycle whether anything it surfaced needs follow-up work.
+- A meaningful chunk of tracked time this cycle (all of Wednesday, part of Tuesday evening) went to log/documentation upkeep rather than feature work — reasonable after a demo push, but worth naming explicitly rather than folding into feature-shaped cycle language.
+
+### Retrospective:
+- The dev Postgres DB reset / isolated test-DB goal is now carried over a fourth straight cycle. The CI-side version of the same class of bug got fixed this cycle almost incidentally (via the migration-ordering fix) — the shared dev DB deserves the same deliberate attention rather than another carryover.
+- `make e2e-up` Windows compatibility remains untouched for the fourth cycle running.
+
+## Next Cycle Goals
+- Confirm whether 14/7's live-testing event surfaced anything requiring follow-up from PR #1066 or #1077
+- Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) — carried over a fifth cycle now (Cycles 14–17)
+- Revisit `make e2e-up` for Windows compatibility — carried over from Cycles 14–16
+- Begin **Feature 9: System Health Monitoring**
+- Begin **Feature 10: Audit Logging**
+- Begin **Feature 12: Secure Troubleshooting**
+
+---
+
+# Cycle 18 Report: July 17 – July 20
+
+## Timesheet
+
+### Clockify Report
+
+- 17/7 (Friday): meeting – 2h 41m 12s
+- 19/7 (Sunday): Feature 9 implementation, System Health Monitoring – 2h 30m 25s
+- 20/7 (Monday): PR review – 2h 45m 25s (10:30PM–1:15AM, spilling into 21/7)
+
+**Total (clocked): ~7h 57m**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting + Cycle 17 Write-Up Merge (Friday, 17/7)
+- Attended the team meeting, 9:44AM–12:25PM (2h41m)
+- Same morning: closed out the Cycle 17 report (`add Cycle 17 Bao's log`, `update`, `Update Bao's log`) and opened/merged **PR #1089** (`logs-bao` → `develop`) at 11:35, landing the Cycle 17 write-up
+<img width="1124" height="66" alt="Screenshot 2026-07-21 113530" src="https://github.com/user-attachments/assets/cd2eaeaf-f469-40c1-9001-4fb7508d5fa6" />
+
+### 2: Feature 9 — System Health Monitoring (Sunday, 19/7)
+- Started implementation on `feature/system-health-monitoring`: new `services/health.py`, `services/ai_health.py`, models `health_check.py` and `ai_call_health.py`, schema `schemas/health.py`, and admin router wiring for surfacing system/AI-call health to admins
+- The work landed as a single commit, `Add new system health monitoring for admin`, the morning of 21/7 rather than within this window — same gap Cycle 17 flagged for its own Wednesday entry: Sunday's clocked time isn't matched 1:1 by a same-day commit, only by the follow-through the following session
+<img width="1121" height="62" alt="Screenshot 2026-07-21 113534" src="https://github.com/user-attachments/assets/5f3ed0d8-e85d-463e-a5da-5ccdd772e7fa" />
+
+### 3: PR Review — Quiz, Feedback Workflow, and LLM Provider Switching (Monday night, 20/7)
+- Reviewed three open PRs against `develop` using the branch-diff review pipeline (diffing each against its true merge-base, not a stale copy of `develop`):
+  - **PR #1249** (`Feature-1--Quiz-Management`) — AI quiz creation (Classic + New Quizzes) via chat and form. Flagged an incomplete fix for a chat clarify-loop bug (a prior commit only dropped part of the required-fields check) and an auth-dependency inconsistency on two quiz endpoints
+  - **PR #1251** (`Feature-2--Feedback-Workflow`) — AI-assisted feedback/grade posting and inbox reply drafts. Cross-checked against a teammate's existing review comments to avoid duplicating feedback, then added findings on top (audit-log/session bloat, a full-roster fetch to check one student, inconsistent JSON parsing)
+  - **PR #1252** (`feature/llm-provider-switching-cache`) — admin LLM provider defaults with failover, per-instructor encrypted connections, response caching, and limited-mode Canvas gating. Flagged an unhandled `ValueError` on an invalid provider ID and a "Resume N requests" button that only resumes one
+- Each review went through a find → draft-checklist → double-check pipeline, verifying every cited file/line against the actual code before treating it as final
+- Note: the saved review checklists (`docs/reviews/pr-1249-review.md`, `pr-1251-review.md`, `pr-1252-review.md`) aren't present in this branch's working tree as of writing this entry — worth re-saving or re-generating from this session if the team wants them on record
+<img width="1126" height="63" alt="Screenshot 2026-07-21 113539" src="https://github.com/user-attachments/assets/09396241-b5cb-4068-b708-0222a4f99e25" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- Feature 9 is underway but its first real commit landed just outside this cycle's window (morning of 21/7) — worth being upfront that "started" is more accurate than "shipped" for this cycle.
+- PR review work this cycle went deeper than a skim: each of the three reviewed PRs got a verified, line-cited checklist rather than a general "looks good" pass, which is worth keeping as the default bar for reviewing teammates' branches going forward.
+- Two of the three reviewed PRs (quiz management, feedback workflow) share a lot of duplicated code from branching off each other before either merged — worth flagging to the team now, since whichever merges second will need conflict/migration-number cleanup (see Retrospective).
+
+### Retrospective:
+- The dev Postgres DB reset / isolated test-DB goal is now carried over a sixth straight cycle (Cycles 14–18) — still untouched.
+- `make e2e-up` Windows compatibility remains untouched for the fifth cycle running (Cycles 14–18).
+- Migration filenames collide across at least three in-flight feature branches (quiz management, feedback workflow, LLM provider switching all reuse migration numbers 021+ for unrelated tables) — flagged during this cycle's PR reviews; needs coordinating before merge, not left to whoever merges last to discover it.
+
+## Next Cycle Goals
+- Finish and open a PR for **Feature 9: System Health Monitoring**
+- Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) — carried over a sixth cycle now (Cycles 14–18)
+- Revisit `make e2e-up` for Windows compatibility — carried over from Cycles 14–17
+- Coordinate migration-number renumbering across the quiz/feedback/LLM-provider branches before they merge
+- Begin **Feature 10: Audit Logging**
+- Begin **Feature 12: Secure Troubleshooting**
+
+---
+
+# Cycle 19 Report: July 21 – July 23
+
+## Timesheet
+
+### Clockify Report
+
+- 21/7 (Tuesday): Meeting with the team – 2h 42m 25s
+- 22/7 (Wednesday): Implementing / Extending audit log feature – 3h 18m 56s
+- 23/7 (Thursday): Implementing troubleshooting + dashboard – 2h 24m 22s (10:30PM–1:15AM, spilling into 21/7)
+
+**Total (clocked): ~8h 25m 43s**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Tuesday, 21/7)
+- Attended the team meeting — 2h42m25s clocked with the team for coordinating on our features and fixes needed to acknowledge before next implementation
+<img width="1121" height="39" alt="Screenshot 2026-07-24 102939" src="https://github.com/user-attachments/assets/a1ab55ff-9710-46df-a3eb-40ee809fb359" />
+
+### 2: Feature 10 — Audit Logging (Wednesday, 22/7)
+- Landed as a single commit the following night, `Add audit log feature backend + frontend`
+- Merged two previously-disconnected audit sources into one sorted, paginated feed: `audit_logs` (workflow-driven Canvas mutations) and `audit_logs_session` (admin actions, logins, password changes)
+- Closed six real logging gaps: failed logins, regular instructor login/logout (previously admin-only), self-registration, password-reset requests, Canvas connection add/update/remove, and admin settings updates
+- Fixed the exposed `GET /audit/logs` endpoint silently discarding its own `total` count, and replaced the frontend's fixed 200-row fetch with proper `limit`/`offset` pagination and a "Load more" control
+- Fixed a downstream consumer (the MCP `get_audit_logs` tool) that would have silently broken on the new `{items, total}` response shape
+<img width="1118" height="38" alt="Screenshot 2026-07-24 102950" src="https://github.com/user-attachments/assets/3d3edd19-cb8b-49e6-8e31-fe36297d1d1e" />
+
+### 3: Feature 12 — Secure Troubleshooting + Troubleshooting Dashboard (Thursday, 23/7, spilling past midnight into 24/7)
+- New `GET /admin/troubleshoot/diagnostics` and `GET /admin/troubleshoot/failed-operations` endpoints, composed from Feature 9's existing System Health services (`get_latest_health_status`, `get_instructor_canvas_summary`, `get_provider_statuses`) rather than duplicating them, plus a new paginated query over `Workflow.status == "failed"` — closing the gap that no admin-facing endpoint surfaced failed workflows at all
+- Found and fixed a real credential-leak gap while building this: `get_instructor_canvas_summary`'s `last_sync_error` was never redacted before reaching an admin response — now scrubbed through the existing `redact_secrets()` utility, which also benefits the pre-existing System Health page for free
+- New `/admin/troubleshooting` page (`TroubleshootingPage.tsx`) with diagnostics cards (health, uptime, Canvas host, LLM provider status, instructor Canvas connections) and a paginated failed-operations table with "Load more", wired into nav/routing
+<img width="1121" height="39" alt="Screenshot 2026-07-24 103000" src="https://github.com/user-attachments/assets/47970758-9386-463d-8f05-984d9424432e" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- All three of live testing event 2 feature assignments (#9 System Health, #10 Audit Logging, #12 Secure Troubleshooting) are now code-complete and pushed to `feature/secure-trouble-shooting-integration-monitoring`
+- The Troubleshooting diagnostics endpoint deliberately reused System Health's existing service functions instead of re-implementing them — kept the new feature small, and meant the credential-redaction fix landed in one shared place instead of two.
+
+### Retrospective:
+- Found a genuine, unredacted credential-leak path (`last_sync_error` on the System Health page) while building an unrelated feature — worth a quick audit of other admin-facing free-text fields (error details, log messages) for the same class of gap rather than waiting to trip over the next one incidentally.
+
+## Next Cycle Goals
+- **Priority: track down and fix the Vite dev-proxy / backend-connectivity bug found during this cycle's Docker reset** — the Troubleshooting page currently fails to load in the browser even though the backend endpoints work correctly when called directly
+- Fix any other integration bugs found ahead of **Testing Live Event 2 next Tuesday** — treat this as the cycle's primary deadline
+- Audit other admin-facing free-text fields (error details, sync/log messages) for the same unredacted-credential class of bug just found and fixed in System Health
+
+---
+
+# Cycle 20 Report: July 24 – July 27
+
+## Timesheet
+
+### Clockify Report
+
+- 24/7 (Friday): Meeting with the team – 2h 51m 13s
+- 25/7 (Saturday): Coding, fix bugs, review PRs – 4h 13m 34s
+- 27/7 (Monday): Coding, fix bugs, review PRs – 2h 37m 00s
+- 27/7 (Monday night, spilling into 28/7): Review PRs – 2h 31m 52s (11:43PM–2:15AM)
+
+**Total (clocked): ~12h 13m 39s**
+<img width="1109" height="60" alt="Screenshot 2026-07-28 221856" src="https://github.com/user-attachments/assets/cba50a6c-2158-4dac-8674-a7b702315d21" />
+<img width="1115" height="66" alt="Screenshot 2026-07-28 221858" src="https://github.com/user-attachments/assets/b0b8ec91-1749-454c-a1a2-630a5b12700b" />
+<img width="1118" height="103" alt="Screenshot 2026-07-28 221902" src="https://github.com/user-attachments/assets/6a248495-f9ef-494d-9360-14d4e7ffbf34" />
+
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Friday, 24/7)
+- Attended the team meeting, 9:24AM–12:15PM (2h51m), coordinating on the Feature 9/10/12 work landed at the very end of Cycle 19 and what still needed follow-up before Testing Live Event 2
+
+### 2: Consolidating Troubleshooting onto Feature 11's Failed-Operations Table (Friday night 24/7 – Saturday 25/7)
+- `Update system health, extend troubleshoot monitoring`: trimmed the System Health page/service down as part of folding its diagnostics into the new Troubleshooting surface
+- `Merge feature/failed-operation-monitoring to build consolidated troubleshooting on top of it`: pulled in a teammate's Feature 11 `failed_operations` table (migration `031_failed_operations.sql`, `services/failed_operations.py`, `FailedOperationsPage.tsx`) as the foundation to build on
+- `Consolidate failed-operations onto Feature 11's table, retire Workflow-based version`: Troubleshooting's diagnostics previously derived "recent failures" from a `Workflow.status == "failed"` query (redacted on read); switched it to Feature 11's richer, append-only, redacted-at-write-time table via `get_failed_operations_summary()`, and removed the now-redundant `list_failed_operations`/`FailedOperation` schema and `/admin/troubleshoot/failed-operations` route
+- `Fold FailedOperationsPage into Troubleshooting instead of a separate nav item` / `Fold fail log page into troubleshooting page, adjust information to suit users instead of showing technical details`: merged the two admin pages into one (`TroubleshootingPage.tsx`, +348/−~0 net after the fold) and reworded raw technical failure detail into user-facing language
+- Landed as **PR #1284** (`feature/secure-trouble-shooting-integration-monitoring`), merged 00:18 on 27/7
+- Cleanup along the way: `Fix failed frontend test`, `fix lint error`, `Fix lint: sort imports in support_tickets router, drop unneeded f-string prefix`
+
+### 3: Audit Log Hardening — Server-Side Search, Pagination Fix, Anonymous Rows (Saturday 25/7 – Monday 27/7)
+- `Add server-side search/filter to audit log listing` / `Drive AuditLogsPage from server-side search instead of client filtering`: search/action/user/result/date filters now run as real SQL `WHERE` clauses across `audit_logs`/`audit_logs_session` instead of filtering whatever page happened to already be loaded client-side; removed the now-dead `filterAuditLogs`/search-text helpers
+- `Update requests change fixed`: additional backend/frontend test coverage for the new server-side query shape
+- `Merge remote-tracking branch 'origin/feature/failed-operation-monitoring' ...`: picked up teammate's Canvas-idempotency migrations along the way (renumbered `034`–`037`), resolving a conflict in `db/init/01_schema.sql` and `db/migrations/README.md`
+- `Fix anonymous audit-row support dropped during develop merge`: a prior merge staged the conflict resolution for `services/audit.py`/`map-audit-log.ts`/`types/auditLog.ts` before three files were actually patched to restore anonymous (nullable `user_id`) failed-login audit rows — an inner join on `AuditLogSession.user` was silently dropping those rows entirely; switched to an outer join with an "unknown" role fallback, caught before merge because it was tested locally first
+- `Fix remaining audit-log review findings: pagination cap, export completeness, load-more race`: replaced a two-branch `list_audit_logs` (Python-side sort capped at 5000 rows for non-timestamp sorts, silently dropping rows past that) with one SQL `UNION ALL` + `ORDER BY`/`LIMIT`/`OFFSET` for every sort field; fixed CSV export silently truncating to whatever page was already fetched instead of pulling the full server-side result set first; fixed a real race between rapid Export/"Load more" clicks using a ref-based mutex instead of state that can't block two clicks landing before either `setState` commits
+- Landed as **PR #1266** (`feature/testing-event-2-audit-logging`)
+
+### 4: Support Ticket Escalation from Failed Operations + LLM Provider Fixes (Monday, 27/7)
+- `update failed operation`: added admin-assignment fields to support tickets (`services/support_tickets.py`, migration `039_support_ticket_assigned_admin.sql`) and wired an "Escalate to ticket" flow into `FailedOperationsPage.tsx`
+- `update API key check not just showing connection` / `Update LLM adapter`: `llm_connections.py`/`provider_registry.py` now actually validate a configured provider's API key instead of just reporting it as "connected", with matching test coverage in `test_llm_api_endpoints.py` and `test_llm_providers_and_cache.py`
+- `update system health color`: sidebar/status-color consistency pass across `SystemHealthPage.tsx` and `TroubleshootingPage.tsx`
+- `Fix FailedOperationsPage test: mock fetchAssignableAdmins`: a test was masked by a `Promise.all` silently rejecting on an unmocked call and leaving ticket state `null` — most tests couldn't tell because a null ticket renders the same button as a real one, but one assertion on actual ticket status caught it
+
+### 5: PR Review Session — 3 Teammate Branches via the Structured Review Pipeline (Monday night 27/7, 11:43PM–2:15AM)
+- Reviewed three branches (`bugfix/fuzz-testing-harness`, `bugfix/canvas-connection-card-and-dashboard-refresh`, `bugfix/assistant-memory-grounding-parse`) using the same find → draft-checklist → double-check pipeline established in Cycle 18, each diffed against `develop`'s true merge-base
+- **fuzz-testing-harness**: flagged a `parse_action` crash — a non-string `"action"` value (nested object/array) in a model's JSON reply would `TypeError` past the function's own `ToolExecutionError` contract, and the harness's own fuzz strategy was too narrow to have ever caught it. Author fixed it (`isinstance` guard + a widened fuzz strategy) before merge — confirmed the fix is present in the merged commit (**PR #1314**, merged 01:13 on 28/7)
+- **canvas-connection-card-and-dashboard-refresh**: one non-blocking nit (missing test coverage for the "reappear after deleting the last connection" UI branch) — approved, merged as **PR #1312** (00:54 on 28/7)
+- **assistant-memory-grounding-parse**: flagged two Must-Fix items — (1) the Canvas URL validator's `http://localhost` bypass lost its `settings.DEBUG` gate, so it's now allowed in production too (confirmed via `git log -p` that the removed condition was original, deliberate SSRF-prevention code, unrelated to this PR's actual purpose); (2) `_run_resolve_missing_submissions_chain` doesn't return its server-verified `assignment_id` the way its two sibling chains do, so a hallucinated model-supplied ID can still get persisted into field memory via a fallback path — exactly the class of bug the rest of the PR fixes elsewhere. 
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- Both of this cycle's two carried-over feature branches shipped as real PRs: **#1284** consolidated Troubleshooting onto Feature 11's failed-operations table (retiring the earlier Workflow-based version from Cycle 19), and **#1266** hardened Audit Logging with server-side search, a real pagination fix, and export/race fixes surfaced by review.
+- The audit-log pagination fix in particular was a genuine correctness bug, not just a nit — the old Python-side sort silently dropped rows past 5000 for any non-timestamp sort field, which would have been invisible until someone paginated deep enough to notice missing rows.
+
+### Retrospective:
+- **The Canvas URL SSRF-gate regression from the `assistant-memory-grounding-parse` review is now live on `develop`** (confirmed by diffing `origin/develop`'s current tip) — this should be the first thing addressed next cycle, not treated as a routine carryover, since it weakens a production security control and has nothing to do with that PR's stated purpose.
+- Two commits Saturday night (`45412c5`/`94e8e66`, same message, overlapping diffs) repeat the exact duplicate-commit pattern already flagged in Cycle 15's retro — worth actually checking `git log --all --grep` before re-committing a fix next time, not just noting it again.
+- The dev Postgres DB reset / isolated test-DB goal and `make e2e-up` Windows compatibility were last explicitly tracked in Cycle 18 ("sixth"/"fifth straight cycle") — Cycle 19's own "Next Cycle Goals" dropped both without an explicit resolution, and no commit this cycle touched either. Re-flagging both below rather than assuming they were quietly fixed; the Vite dev-proxy bug from Cycle 19 also doesn't appear in any commit this cycle.
+
+## Next Cycle Goals
+- fix the Canvas URL validator SSRF regression on `develop`** — restore the `settings.DEBUG` condition removed in PR #1313, or replace it with an explicit non-production gate
+- fix `_run_resolve_missing_submissions_chain`** to return its verified `assignment_id` (matching `_run_fetch_submissions_chain`/`_run_find_assignment_by_submission_rate_chain`) so field memory can't be poisoned with a hallucinated ID from that one chain
+- Confirm the Vite dev-proxy / backend-connectivity bug from Cycle 19 was actually resolved somewhere in this cycle's work, or carry it forward explicitly — it wasn't visible in any commit this cycle
+- Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) — last tracked in Cycle 18 (Cycles 14–18), dropped from Cycle 19's goals, still unaddressed
+- Revisit `make e2e-up` for Windows compatibility — last tracked in Cycle 18 (Cycles 14–18), dropped from Cycle 19's goals, still unaddressed
+- Audit other admin-facing free-text fields for the unredacted-credential class of bug from Cycle 19 — not yet picked up
+
+---
+
+# Cycle 21 Report: July 28 – July 30
+
+## Timesheet
+
+### Clockify Report
+
+- 28/7 (Tuesday): Team meeting – 3h 10m 25s
+- 30/7 (Wednesday night, spilling into 31/7): Applied 2 bug fixes – 2h 57m 50s (10:08PM–1:05AM)
+
+**Total (clocked): ~6h 8m 15s**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Tuesday, 28/7)
+- Attended the team meeting, syncing on Cycle 20's wrap-up (Troubleshooting consolidation, Audit Logging hardening) and the review findings still open heading into this cycle.
+<img width="2254" height="128" alt="Screenshot 2026-07-31 102131" src="https://github.com/user-attachments/assets/70dd843a-b82e-4032-b910-c6dac5464103" />
+
+
+### 2: Troubleshooting Token-Reset Gating + Review Permissions Copy Fix (Wednesday night 30/7)
+- `Update UI for reviewpermission and troubleshooting`:
+  - **Troubleshooting**: added `needs_token_reset` (`services/troubleshoot.py`, `services/failed_operations.py`) to distinguish an actual reconnect-able Canvas token problem from a transient outage, for both the failing-connections list and failed-operation summaries; `TroubleshootingPage.tsx`'s "Reset token" button now only renders when a reset would actually help, instead of always offering an action that's a dead end for outages.
+  - **Review Permissions**: the onboarding page's "Cancel" button actually navigated to reconnect Canvas rather than cancelling anything — relabeled to "Reconnect Canvas" with matching copy/icon so the action matches what it does.
+- Pushed to `bugfix/Permission-troubleshooting-page` with backend/frontend test coverage; not yet merged into `develop`.
+<img width="2260" height="135" alt="Screenshot 2026-07-31 102134" src="https://github.com/user-attachments/assets/ef1f8e43-f4d4-4faa-95d4-a6d75d70a03a" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- Short cycle (~6h logged): one meeting plus one focused bug-fix session. No movement yet on the items carried over from Cycle 20.
+
+### Retrospective:
+- The Canvas URL SSRF-gate regression and the missing-`assignment_id` chain bug flagged at the end of Cycle 20 are still unfixed on `develop` — carrying both forward again rather than letting them go stale a second cycle.
+
+## Next Cycle Goals
+- Fix the Canvas URL validator SSRF regression on `develop` (carried from Cycle 20)
+- Fix `_run_resolve_missing_submissions_chain` to return its verified `assignment_id` (carried from Cycle 20)
+- Merge `bugfix/Permission-troubleshooting-page` into `develop`
+- Confirm/resolve the Vite dev-proxy bug, dev Postgres DB reset, and `make e2e-up` Windows compatibility — all still carried from Cycles 18–20
+- Audit other admin-facing free-text fields for the unredacted-credential class of bug (carried from Cycle 19)
+
+---
+
+# Cycle 22 Report: July 31 – August 3
+
+## Timesheet
+
+### Clockify Report
+
+- 31/7 (Friday): Team meeting – 2h 25m 13s 
+- 1/8 (Saturday): PR review – 3h 10m 44s 
+- 2/8 (Sunday): PR review + applied 2 bug fixes – 2h 43m 00s 
+- 3/8 (Monday night): PR review – 1h 25m 22s 
+
+**Total (clocked): ~9h 44m 19s**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Friday, 31/7)
+- Attended the team meeting, 10:00AM–12:25PM.
+<img width="2215" height="125" alt="Screenshot 2026-08-04 110712" src="https://github.com/user-attachments/assets/6995354f-7b49-4bb1-959f-cdc722c31898" />
+
+### 2: Merged `bugfix/Permission-troubleshooting-page` into `develop` (Friday night, 31/7)
+- **PR #1462** merged into `develop` at 23:39 on 31/7, closing the "merge into develop" item carried from Cycle 21 — lands the Troubleshooting `needs_token_reset` gating and the Review Permissions "Reconnect Canvas" copy/icon fix from that branch.
+<img width="2244" height="131" alt="Screenshot 2026-08-04 110717" src="https://github.com/user-attachments/assets/6f1cab0e-a78f-4051-a82e-1711ff2e9e3d" />
+
+### 3: PR Review Sessions (Saturday 1/8, Sunday night 2/8, Monday night 3/8)
+- Reviewed teammate PRs across three sessions (3h10m44s Saturday, plus review time folded into the Sunday-night and Monday-night blocks below).
+<img width="2247" height="132" alt="Screenshot 2026-08-04 110721" src="https://github.com/user-attachments/assets/4c61facc-9c0d-42c2-829c-b2687b36905a" />
+
+### 4: Two Bug Fixes — Pending-Action Status Treatment + Active-Course Sidebar Badge (Sunday night 2/8, spilling into Monday 3/8)
+- `add bug fixes`:
+  - **Chat pending-action status**: `PendingActionControls.tsx`'s terminal states (confirmed/executing/superseded/failed/cancelled) were a single plain-text line with no visual distinction between them; replaced with a per-state icon + color treatment (spinner for "executing", muted check for "confirmed", destructive red with `role="alert"` for "failed", etc.) so a failed action reads distinctly from a routine confirmation.
+  - **Active-course sidebar badge**: new `ActiveCourseSidebarBadge.tsx`, mounted in `Sidebar.tsx` for the instructor role — surfaces the currently-selected course persistently in the nav sidebar instead of only on pages that have their own course switcher.
+  - Added matching test coverage/mocks in `DashboardLayout.test.tsx` and `Sidebar.test.tsx`.
+<img width="2244" height="130" alt="Screenshot 2026-08-04 110726" src="https://github.com/user-attachments/assets/afc03b54-77b2-4c91-ae7c-817cf6751544" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- One of Cycle 21's three carried goals landed cleanly: `bugfix/Permission-troubleshooting-page` is merged into `develop`. Two additional small fixes went out this cycle (pending-action status clarity, active-course sidebar visibility), alongside the meeting and PR review time.
+
+### Retrospective:
+- The Vite dev-proxy bug, dev Postgres DB reset, `make e2e-up` Windows compatibility, and the unredacted-credential field audit are all still untouched as well.
+
+## Next Cycle Goals
+- New from the issue board: **#1318** Deployment Package, **#1319** Deployment Validation, **#1320** Reliability & Error Handling Validation Service, **#1321** Reliability Validation
+
+---
+
+# Cycle 23 Report: August 4 – August 9
+
+## Timesheet
+
+### Clockify Report
+
+- 4/8 (Tuesday): PR review + meeting – 1h 21m 02s 
+- 4/8 (Tuesday): Team meeting – 2h 25m 25s 
+- 6/8 (Thursday): PR review – 1h 30m 25s 
+- 7/8 (Friday): Team meeting – 2h 40m 00s 
+- 8/8 (Saturday): PR review – 1h 05m 25s 
+- 9/8 (Sunday): PR review + personal log – 2h 42m 23s 
+
+**Total (clocked): ~11h 44m 40s**
+
+---
+
+## Completed Tasks
+
+### 1: PR Review + Team Meeting (Tuesday, 4/8)
+- Started the day reviewing open teammate pull requests before the main team meeting
+- Attended the team meeting, 10:00AM–12:25PM, syncing on Cycle 22's wrap-up and priorities heading into this cycle
+<img width="2240" height="214" alt="Screenshot 2026-08-09 120724" src="https://github.com/user-attachments/assets/9467e190-38ef-4244-801a-231e0063aca2" />
+
+### 2: PR Review (Thursday, 6/8)
+- Reviewed open teammate pull requests
+<img width="2238" height="126" alt="Screenshot 2026-08-09 120734" src="https://github.com/user-attachments/assets/e528381c-5761-461d-9c7d-4dc4fade965e" />
+
+### 3: Team Meeting (Friday, 7/8)
+- Attended the team meeting, 12:25PM–3:05PM, fixing DFD diagram, discussing about what need to fix in UI, chat assistant
+<img width="2239" height="139" alt="Screenshot 2026-08-09 120738" src="https://github.com/user-attachments/assets/2e76cf7a-b161-4e5c-8391-678f74f75605" />
+
+### 4: Structured Multi-Branch PR Review — Assistant/Chat Branches + Canvas Token Uniqueness (Saturday night 8/8 – Sunday 9/8)
+- Reviewed three in-flight branches against `develop`:
+  - `bugfix/chat-intent-response` — 7 confirmed bugs, worst one a course-correction reply that can silently write an assignment to the wrong course while the preview text shows the right one
+  - `bugfix/AI-chat-response` (**PR #1556**) — a punctuation bug proven by running the PR's own untested test, plus a grade-feedback field that gets dropped across multi-step clarifies, undermining the PR's own stated fix
+  - `feature/unique-canvas-token` (**PR #1557**) — a full-table decrypt on every token check, plus two UI issues found through manual testing: a misleading "Reconnect Canvas" prompt on the token-conflict error, and the uniqueness check not being scoped to one Canvas institution
+<img width="2250" height="134" alt="Screenshot 2026-08-09 120741" src="https://github.com/user-attachments/assets/2e0e7519-c1f6-4709-ad4b-1d6f3c5c98ab" />
+<img width="2241" height="132" alt="Screenshot 2026-08-09 120744" src="https://github.com/user-attachments/assets/20e6f557-ae84-4ccb-99cd-f53f0a60b0a7" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle split cleanly into two halves: the first (4/8–7/8) was meetings and lighter PR review; the second (8/8–9/8) was a much deeper, structured review pass across three branches/PRs, closing the gap Cycle 22's retrospective flagged 
+- Actually running code instead of reasoning about it caught two things a read-through alone wouldn't have: the `AI-chat-response` PR's own test was failing and had simply never been executed, and the token-uniqueness PR's test-suite-breakage question got a real answer instead of a guess.
+
+### Retrospective:
+- **Lost a separate branch's worth of confirmed, working fixes to an uncommitted-changes wipe** when the working branch got switched mid-session via GitHub Desktop with no stash created. The fixes were sound — verified before the loss — but the lesson is procedural, not technical: commit before any branch switch, even to a throwaway branch, and don't treat "verified working" as safe to leave uncommitted.
+- The Canvas URL SSRF-gate regression and the missing-`assignment_id` chain bug flagged at the end of Cycle 20 are still unfixed on `develop` — three cycles straight now (21–23) without being picked up, on top of four longer-standing infra carryovers (Vite dev-proxy, dev DB reset, `make e2e-up` Windows compatibility, credential-field audit). This is turning into a backlog problem, not a scheduling one, and needs to be treated that way next cycle instead of rolling forward again.
+- This cycle's own new findings are real and reviewer-verified but none are fixed yet — still PR comments, not landed commits, as of this write-up.
+
