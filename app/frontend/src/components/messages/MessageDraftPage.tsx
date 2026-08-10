@@ -772,7 +772,6 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         isSending={pageState === "sending"}
         deliveryMode={deliveryMode}
         onConfirm={() => void handleConfirmSend()}
-        deliveryMode={deliveryMode}
       />
     </div>
   );
