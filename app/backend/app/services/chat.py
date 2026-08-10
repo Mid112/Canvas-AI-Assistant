@@ -1684,6 +1684,7 @@ def _empty_filter_switch_offer(
         ],
         "clarify_payload": {
             "user_message": user_message,
+            "assignment_reference": assignment_name,
             "local_course_id": elsewhere[0][0] if len(elsewhere) == 1 else None,
             "course_name": elsewhere[0][1] if len(elsewhere) == 1 else None,
         },
@@ -1931,6 +1932,28 @@ async def _apply_pending_course_switch(
     clear_course_scoped_field_memory(conversation)
     clear_pending_expectation(target_conversation)
     await _sync_course_context_envelope(db, target_conversation, target.id)
+
+    # Close the thread being left. It keeps the honest record of what happened
+    # in it — the question, "not here, try X?", and the "yes" — and this says
+    # where the work went. Without it the transcript ends on a bare "yes" and
+    # reads as a question this course never answered, which is the same
+    # dead-end appearance the whole offer exists to remove.
+    named = payload.get("assignment_reference") or "that"
+    await log_message(
+        db,
+        conversation,
+        role="assistant",
+        content=json.dumps(
+            {
+                "action": "respond",
+                "message": (
+                    f'"{named}" isn\'t in '
+                    f"{conversation.course_name or 'this course'} — continuing "
+                    f"in {course_label}. This chat stays here."
+                ),
+            }
+        ),
+    )
     print(f"Switched to {course_label}; continuing the original request")
     return None, original_message, target_conversation
 
@@ -1980,6 +2003,7 @@ def _assignment_elsewhere_clarify(
         # choice supplies the id instead.
         "clarify_payload": {
             "user_message": user_message,
+            "assignment_reference": reference,
             "local_course_id": elsewhere[0][0] if len(elsewhere) == 1 else None,
             "course_name": elsewhere[0][1] if len(elsewhere) == 1 else None,
         },
@@ -5552,10 +5576,6 @@ async def handle_chat_message(
         decision, replay_message, switch_conversation = switch_reply
         if decision is not None:
             return conversation, decision, False
-        # The turn continues in the target course's own conversation, and the
-        # message the instructor just sent moves with it — otherwise "yes"
-        # stays filed under the course they were leaving.
-        user_msg.conversation_id = switch_conversation.id
         conversation = switch_conversation
         # Confirmed: the conversation now points at the right course, and the
         # instructor's ORIGINAL words are replayed through the normal pipeline
@@ -5564,6 +5584,20 @@ async def handle_chat_message(
         # write-preview gating as if they had typed it in the right course to
         # begin with.
         message = replay_message
+        # The replayed request is logged as this course's own user message, and
+        # the "yes" stays behind in the course it answered a question in.
+        #
+        # Moving the "yes" across instead (what this used to do) split the
+        # exchange down the middle: the course being left showed an offer
+        # nobody replied to, and the course being entered showed an answer with
+        # no question above it — so reopening that tab, or sending one more
+        # turn there, meant reading a reply to something recorded in a
+        # different conversation. Each transcript now stands on its own.
+        #
+        # user_msg is rebound because everything downstream hangs off it —
+        # workflows record source_user_message_id, and a write in this course
+        # must not point at a message filed under another one.
+        user_msg = await log_message(db, conversation, role="user", content=message)
         history = await _get_recent_messages(db, conversation.id)
 
     # Bind a course-less conversation to the course its first message names.

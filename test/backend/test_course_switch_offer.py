@@ -13,8 +13,9 @@ a real "yes" replays what was originally asked instead of just changing the
 course and forgetting the task.
 """
 
+import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -94,7 +95,7 @@ _TWO_CANDIDATES = [{"id": 9, "label": "Capstone Project"}, {"id": 10, "label": "
 
 def _conversation(payload, course_name="testing 2", candidates=None):
     conversation = SimpleNamespace(
-        field_memory={}, course_id=1, course_name=course_name
+        id=5, field_memory={}, course_id=1, course_name=course_name
     )
     record_pending_expectation(
         conversation,
@@ -108,6 +109,7 @@ def _conversation(payload, course_name="testing 2", candidates=None):
 
 _PAYLOAD = {
     "user_message": "who submitted to testing event 2?",
+    "assignment_reference": "Testing Event 2",
     "local_course_id": 9,
     "course_name": "Capstone Project",
 }
@@ -119,8 +121,6 @@ def _adapter(answer="unrelated", *, course_id=None, raises=None, raw=None):
     Defaults to "unrelated" — the safe answer — so a test that does not care
     about the resolver cannot pass because the stub happened to consent.
     """
-    import json as _json
-
     adapter = SimpleNamespace()
     if raises is not None:
         adapter.generate = AsyncMock(side_effect=raises)
@@ -128,9 +128,18 @@ def _adapter(answer="unrelated", *, course_id=None, raises=None, raw=None):
         adapter.generate = AsyncMock(
             return_value=raw
             if raw is not None
-            else _json.dumps({"answer": answer, "course_id": course_id})
+            else json.dumps({"answer": answer, "course_id": course_id})
         )
     return adapter
+
+
+# The db mock from the most recent _answer, so a test can read what the switch
+# wrote into the transcript without every caller having to unpack it.
+_LAST_DB: list = []
+
+
+def _logged_messages() -> list:
+    return [call.args[0] for call in _LAST_DB[-1].add.call_args_list]
 
 
 async def _answer(
@@ -149,6 +158,10 @@ async def _answer(
             instructor_id=owner_id,
         )
     )
+    # Session.add is synchronous; an AsyncMock here returns an un-awaited
+    # coroutine and buries the real assertions in warnings.
+    db.add = MagicMock()
+    _LAST_DB.append(db)
     # Built from the course actually routed to, so the returned conversation
     # is evidence of WHICH course was chosen, not just that one was.
     forked: list[SimpleNamespace] = []
@@ -273,6 +286,44 @@ async def test_no_pending_offer_leaves_the_turn_alone():
     result, _, _routed = await _answer("yes", conversation=conversation)
 
     assert result is None
+
+
+# ── what each transcript is left holding ─────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_the_course_being_left_records_where_the_work_went():
+    """Its own turn ended on a bare "yes", which reads as a question this
+    course never answered — the same dead end the offer exists to remove."""
+    await _answer("yes")
+
+    logged = _logged_messages()
+    assert len(logged) == 1
+    note = logged[0]
+    # Written into the course being LEFT, not the one being entered.
+    assert note.conversation_id == 5
+    assert note.role == "assistant"
+
+    said = json.loads(note.content)["message"]
+    assert "Testing Event 2" in said       # what wasn't here
+    assert "testing 2" in said             # where it wasn't
+    assert "Capstone Project" in said      # where the work went
+
+
+@pytest.mark.anyio
+async def test_declining_writes_no_note():
+    """Nothing moved, so there is nothing to explain — and a "switched to..."
+    line in a course that was never left would be a plain lie in the record."""
+    await _answer("nah")
+
+    assert _logged_messages() == []
+
+
+@pytest.mark.anyio
+async def test_a_non_answer_writes_no_note():
+    await _answer("actually show me the roster")
+
+    assert _logged_messages() == []
 
 
 # ── answering it in words the list doesn't have ──────────────────────────────
