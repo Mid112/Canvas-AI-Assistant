@@ -1242,6 +1242,9 @@ def test_switching_course_and_back_returns_to_the_original_conversation(client):
             headers=headers,
         )
         conversation_a_id = first.json()["conversation_id"]
+        # Creating the first conversation is not moving an existing one, so
+        # there is nothing for the client to follow.
+        assert first.json()["course_id"] is None
 
         # Turn 2: switch to course 502 mid-thread — routes to a new
         # conversation B, not conversation A.
@@ -1261,6 +1264,12 @@ def test_switching_course_and_back_returns_to_the_original_conversation(client):
         )
         conversation_b_id = second.json()["conversation_id"]
         assert conversation_b_id != conversation_a_id
+        # The thread moved, so the response says where to. The chat tab strip
+        # is keyed by course, not by conversation id: without this the reply
+        # lands under a tab still named after the course they left, and the
+        # active-course selector never follows either.
+        assert second.json()["course_id"] == local_ids["COSC 502"]
+        assert second.json()["course_name"] == "COSC 502"
 
         # Turn 3: switch back to course 501 — must reuse conversation A,
         # not fork a third one.
@@ -1288,3 +1297,46 @@ def test_switching_course_and_back_returns_to_the_original_conversation(client):
     assert "first message about 501" in contents
     assert "back to 501" in contents
     assert "switch to 502" not in contents
+
+
+# Verifies: the moved-course signal is reported only when the thread actually
+# moved. An instructor accepted a "switch to Capstone Project?" offer, the
+# server routed the turn to that course's conversation and answered correctly
+# — and the UI stayed on the tab they had left, still labelled Math 101, with
+# Math 101 still the active course. conversation_id alone could not fix that:
+# the tab strip is keyed by course.
+def test_a_rerouted_turn_reports_the_course_it_landed_in(client):
+    from types import SimpleNamespace
+
+    headers = _register(client)
+
+    def _post(sent_id, routed):
+        with patch(
+            "app.routers.chat.handle_chat_message",
+            new=AsyncMock(
+                return_value=(routed, {"action": "respond", "message": "3 students."}, False)
+            ),
+        ):
+            return client.post(
+                "/api/v1/chat/",
+                json={"message": "yes", "conversation_id": sent_id},
+                headers=headers,
+            ).json()
+
+    moved = _post(
+        4,
+        SimpleNamespace(id=77, course_id=9, course_name="Capstone Project"),
+    )
+    assert moved["conversation_id"] == 77
+    assert moved["course_id"] == 9
+    assert moved["course_name"] == "Capstone Project"
+
+    # The ordinary turn: same conversation back, so nothing is reported and no
+    # existing turn changes behaviour. Firing on every turn instead would make
+    # the tab strip re-route continuously off a signal that means nothing.
+    stayed = _post(
+        4,
+        SimpleNamespace(id=4, course_id=9, course_name="Capstone Project"),
+    )
+    assert stayed["course_id"] is None
+    assert stayed["course_name"] is None

@@ -72,6 +72,83 @@ describe("sendAssistantMessage", () => {
     expect(response.conversationId).toBe(9);
   });
 
+  // A course switch the instructor agreed to mid-conversation moves the thread
+  // server-side, but the reply that follows is usually a plain read with no
+  // preview — and proposed_action.local_course_id, the only course signal the
+  // mapper had, exists only on previews. So the answer arrived from the right
+  // course while the tab strip stayed on the one they had left: right content,
+  // wrong tab name, wrong active course.
+  it("reports the course when the server moved the turn to another one", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          conversation_id: 77,
+          is_error: false,
+          course_id: 9,
+          course_name: "Capstone Project",
+          reply: {
+            action: "respond",
+            message: "3 students submitted to Testing Event 2.",
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const response = await sendAssistantMessage("access-token", "yes");
+
+    expect(response.resolvedCourse).toEqual({
+      localCourseId: 9,
+      courseName: "Capstone Project",
+    });
+    expect(response.conversationId).toBe(77);
+  });
+
+  it("reports no course when the turn stayed where it was", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          conversation_id: 9,
+          is_error: false,
+          course_id: null,
+          course_name: null,
+          reply: { action: "respond", message: "Here you go." },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const response = await sendAssistantMessage("access-token", "hi");
+
+    expect(response.resolvedCourse).toBeUndefined();
+  });
+
+  // A preview names the course the instructor is about to write to. That is a
+  // stronger claim than "the conversation is on this course" and has to keep
+  // winning, or confirming a write could land in a tab for a different one.
+  it("prefers the previewed course over the conversation's", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          conversation_id: 77,
+          is_error: false,
+          course_id: 9,
+          course_name: "Capstone Project",
+          reply: {
+            action: "intent_preview",
+            proposed_action: { action: "create_assignment", local_course_id: 12 },
+            preview_metadata: { course_name: "CPSC 310" },
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const response = await sendAssistantMessage("access-token", "make a lab");
+
+    expect(response.resolvedCourse?.localCourseId).toBe(12);
+  });
+
   // Regression test for #1509: the assistant resolved an explicitly named
   // course ("show assignments for COSC 499") against whichever course
   // happened to be active instead. The cause was sendAssistantMessage
