@@ -44,6 +44,8 @@ from app.models.canvas_course_name import CanvasCourseName
 from app.models.conversation import Conversation
 from app.models.course import Course
 from app.models.message import Message
+from app.models.student import Student
+from app.models.submission import Submission
 from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
 from app.models.user_preference import UserPreference
@@ -1089,6 +1091,194 @@ async def _prescan_assignment_reference(
     _, canvas_assignment_id, title = matches[0]
     resolved_id = _coerce_int(canvas_assignment_id)
     return None if resolved_id is None else {"assignment_id": resolved_id, "assignment_title": title}
+
+
+async def _prescan_student_references(
+    db: AsyncSession, conversation: Conversation, message: str
+) -> list[dict]:
+    """Students the message names, matched against this course's synced roster.
+
+    Same contract as _prescan_assignment_reference — deterministic, local, and
+    silent when unsure — but plural, because one message routinely names
+    several people ("message Coin and Alice about the midterm").
+
+    Three forms are matched per student, in the order the design fixes:
+    full name, then surname, then given name. A student is kept only on their
+    longest matching form, so "Alice Smith" does not also register as a hit on
+    a different Alice.
+
+    Two ways a match is dropped rather than guessed at:
+
+    * the same text matches two students ("Smith" with two Smiths on the
+      roster) — genuinely ambiguous, and dropping only those two still lets
+      every other name in the same message resolve;
+    * one student's matched text is a proper substring of another's, which is
+      what "Alice" is next to "Alice Smith" — the longer one is what was
+      actually typed.
+
+    Inactive enrollments are excluded: a withdrawn student is not a target,
+    and resolving one would put a name in the prompt that no later write could
+    act on.
+    """
+    if conversation.course_id is None:
+        return []
+    normalized_message = _normalize_course_text(message)
+    if not normalized_message:
+        return []
+
+    rows = (
+        await db.execute(
+            select(Student.canvas_user_id, Student.name, Student.sortable_name).where(
+                Student.course_id == conversation.course_id,
+                Student.enrollment_state == "active",
+            )
+        )
+    ).all()
+
+    # matched text -> the students it picked out, so an ambiguous name can be
+    # dropped without taking the unambiguous ones in the same message with it.
+    by_matched_text: dict[str, list[tuple[str, str]]] = {}
+    for canvas_user_id, name, sortable_name in rows:
+        best = ""
+        for form in _student_name_forms(name, sortable_name):
+            normalized_form = _normalize_course_text(form)
+            if len(normalized_form) < _PRESCAN_MIN_TITLE_LENGTH:
+                continue
+            if normalized_form in normalized_message and len(normalized_form) > len(best):
+                best = normalized_form
+        if best:
+            by_matched_text.setdefault(best, []).append((canvas_user_id, name))
+
+    unambiguous = {
+        text: students[0]
+        for text, students in by_matched_text.items()
+        if len(students) == 1
+    }
+    resolved: list[dict] = []
+    for text, (canvas_user_id, name) in unambiguous.items():
+        if any(text != other and text in other for other in unambiguous):
+            continue
+        student_id = _coerce_int(canvas_user_id)
+        if student_id is not None:
+            resolved.append({"student_id": student_id, "student_name": name})
+    resolved.sort(key=lambda entry: entry["student_id"])
+    return resolved
+
+
+def _student_name_forms(name: str | None, sortable_name: str | None) -> tuple[str, ...]:
+    """Full name, surname, given name — in the precedence order the matcher
+    relies on. sortable_name is Canvas's "Surname, Given", which is where the
+    surname can be read off without guessing at where a multi-word given name
+    ends."""
+    forms: list[str] = []
+    if name:
+        forms.append(name)
+    if sortable_name and "," in sortable_name:
+        surname, _, given = sortable_name.partition(",")
+        forms.extend(part.strip() for part in (surname, given) if part.strip())
+    elif name and " " in name:
+        given, _, surname = name.partition(" ")
+        forms.extend(part.strip() for part in (surname, given) if part.strip())
+    return tuple(forms)
+
+
+async def _prescan_submission_reference(
+    db: AsyncSession,
+    conversation: Conversation,
+    assignment: dict | None,
+    students: list[dict],
+) -> dict | None:
+    """The one submission a turn is about, once the assignment and exactly one
+    student are already known.
+
+    Derived rather than matched: nobody types a submission's name. It exists so
+    that "regrade Coin's midterm" arrives with the submission already
+    identified instead of the model asking which submission of which
+    assignment. Two named students means the turn is not about one submission,
+    so it stays silent.
+    """
+    if conversation.course_id is None or assignment is None or len(students) != 1:
+        return None
+
+    row = (
+        await db.execute(
+            select(Submission.canvas_submission_id, Submission.status)
+            .join(Assignment, Submission.assignment_id == Assignment.id)
+            .where(
+                Assignment.course_id == conversation.course_id,
+                Assignment.canvas_assignment_id == str(assignment["assignment_id"]),
+                Submission.student_canvas_id == str(students[0]["student_id"]),
+            )
+        )
+    ).first()
+    if row is None:
+        return None
+    submission_id = _coerce_int(row[0])
+    if submission_id is None:
+        return None
+    return {"submission_id": submission_id, "submission_status": row[1]}
+
+
+# Above this many named students, the roster goes behind a handle instead of
+# into the prompt. Five is the point at which a list stops being context and
+# starts being a data dump the model will happily paraphrase back at the user.
+_PRESCAN_STUDENT_NAME_LIMIT = 5
+
+
+async def _run_reference_prescan(
+    db: AsyncSession,
+    conversation: Conversation,
+    course_names: list[CanvasCourseName],
+    message: str,
+) -> dict:
+    """Every local reference the raw message already settles, resolved before
+    the model sees the turn.
+
+    The ordering is a dependency chain, not a preference: the submission needs
+    the assignment and the student, and both of those are scoped to the
+    conversation's course. Each step stays silent when unsure and leaves the
+    field to the existing LLM resolvers downstream, so this can only add
+    certainty — never remove a resolution path that already worked.
+    """
+    prescan: dict[str, Any] = {}
+
+    named_course = _prescan_course_reference(course_names, message)
+    if named_course is not None and named_course.local_course_id is not None:
+        prescan["local_course_id"] = named_course.local_course_id
+        prescan["course_name"] = _course_display_name(named_course)
+
+    assignment = await _prescan_assignment_reference(db, conversation, message)
+    if assignment:
+        prescan.update(assignment)
+
+    students = await _prescan_student_references(db, conversation, message)
+    if 0 < len(students) <= _PRESCAN_STUDENT_NAME_LIMIT:
+        prescan["students"] = students
+    elif students:
+        # Past the limit the names are replaced by the same handle machinery
+        # resolve_missing_submissions already uses, so a later send_message
+        # turn can materialize the real recipients without them ever having
+        # been in the prompt.
+        resolved_set = await create_resolved_set(
+            db,
+            conversation,
+            kind="prescan_students",
+            query={"local_course_id": conversation.course_id, "source": "prescan"},
+            recipients=[
+                {"user_id": entry["student_id"], "name": entry["student_name"]}
+                for entry in students
+            ],
+        )
+        prescan["student_count"] = len(students)
+        prescan["recipient_handle"] = resolved_set.handle
+
+    submission = await _prescan_submission_reference(
+        db, conversation, assignment, students
+    )
+    if submission:
+        prescan.update(submission)
+
+    return prescan
 
 
 def _format_prescan_for_prompt(prescan: dict | None) -> str:
@@ -4196,7 +4386,7 @@ async def handle_chat_message(
     # which is revising an already-resolved proposed action.
     if pending_message_id is None:
         prescan_block = _format_prescan_for_prompt(
-            await _prescan_assignment_reference(db, conversation, message)
+            await _run_reference_prescan(db, conversation, course_names, message)
         )
         if prescan_block:
             system_prompt = f"{system_prompt}\n\n{prescan_block}"
