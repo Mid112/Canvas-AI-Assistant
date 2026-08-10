@@ -42,6 +42,7 @@ Start with the final package index: [`docs/final/README.md`](docs/final/README.m
 | Architecture | [`docs/final/architecture.md`](docs/final/architecture.md) |
 | API overview | [`docs/final/api-reference.md`](docs/final/api-reference.md) |
 | Testing report | [`docs/testing report/Final_Testing_Report_Detailed.pdf`](docs/testing%20report/Final_Testing_Report_Detailed.pdf) |
+| Final design and analysis report | [`docs/final/Final_Design_and_Analysis_Report.pdf`](docs/final/Final_Design_and_Analysis_Report.pdf) |
 | Requirements traceability | [`docs/final/Requirements_Traceability_Matrix.pdf`](docs/final/Requirements_Traceability_Matrix.pdf) |
 | Design | [`docs/design/README.md`](docs/design/README.md) |
 

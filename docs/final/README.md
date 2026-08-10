@@ -15,8 +15,8 @@ Use this folder as the entry point for user guides, developer docs, deployment g
 | Architecture | [architecture.md](./architecture.md) |
 | API reference | [api-reference.md](./api-reference.md) |
 | Repository structure | [repository-structure.md](./repository-structure.md) |
-| Final testing report | [`../testing report/Final_Testing_Report_Detailed.pdf`](../testing%20report/Final_Testing_Report_Detailed.pdf) |
 | Final design and analysis report | [Final_Design_and_Analysis_Report.pdf](./Final_Design_and_Analysis_Report.pdf) |
+| Final testing report | [`../testing report/Final_Testing_Report_Detailed.pdf`](../testing%20report/Final_Testing_Report_Detailed.pdf) |
 | Requirements traceability matrix | [Requirements_Traceability_Matrix.pdf](./Requirements_Traceability_Matrix.pdf) |
 | Demo videos | [`../demo-videos/README.md`](../demo-videos/README.md) |
 
