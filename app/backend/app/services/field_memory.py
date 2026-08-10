@@ -167,8 +167,47 @@ _PENDING_EXPECTATION_KEY = "pending_expectation"
 _EXPECTATION_CANDIDATE_CAP = 12
 
 _AFFIRMATIVES = frozenset(
-    {"yes", "yep", "yeah", "yup", "sure", "ok", "okay", "correct", "right", "y"}
+    {"yes", "yep", "yeah", "yup", "sure", "ok", "okay", "correct", "right", "y",
+     "go ahead", "do it", "please do", "yes please", "sounds good", "switch",
+     "absolutely", "definitely", "affirmative", "confirm", "confirmed"}
 )
+
+# No strict "NO" required — instructors answer a yes/no question in whatever
+# words come to hand, and reading "nah" as a fresh request instead of a
+# refusal is how a confirmation loop gets stuck.
+_NEGATIVES = frozenset(
+    {"no", "nope", "nah", "n", "negative", "don't", "dont", "do not",
+     "no thanks", "no thank you", "cancel", "stop", "never mind", "nevermind",
+     "leave it", "stay", "stay here", "keep it"}
+)
+
+
+def read_yes_no(reply: str) -> bool | None:
+    """True/False for an affirmative/negative reply, None if it is neither.
+
+    None is the important return: it means the instructor said something
+    other than an answer, and the caller must not treat that as consent.
+    Silence-as-yes on a course switch would move a write to a different
+    Canvas course than the one they were looking at.
+
+    Matched on the whole reply, not a substring: "no problem, go ahead" is
+    agreement, and a naive "no" search would read it as refusal.
+    """
+    normalized = " ".join((reply or "").lower().split()).strip(" .!?,")
+    if not normalized:
+        return None
+    if normalized in _AFFIRMATIVES:
+        return True
+    if normalized in _NEGATIVES:
+        return False
+    # A leading answer word still counts ("yes, switch to capstone"), which is
+    # how people actually reply, but only when the reply *starts* there.
+    first = normalized.split(",")[0].strip()
+    if first in _AFFIRMATIVES:
+        return True
+    if first in _NEGATIVES:
+        return False
+    return None
 
 _ORDINAL_WORDS = {
     "first": 1, "1st": 1, "one": 1,
@@ -186,14 +225,22 @@ def record_pending_expectation(
     question: str,
     candidates: list[dict[str, Any]] | None = None,
     action: str | None = None,
+    payload: dict[str, Any] | None = None,
 ) -> None:
     """Remember what the assistant just asked, so the next turn can read the
-    reply as an answer to it rather than as a fresh request."""
+    reply as an answer to it rather than as a fresh request.
+
+    ``payload`` carries the request that was interrupted by the question —
+    for a course-switch offer, the action the instructor originally asked
+    for. Without it a "yes" only changes the course and drops what they
+    wanted done in it, making them retype the whole request.
+    """
     memory = dict(conversation.field_memory or {})
     memory[_PENDING_EXPECTATION_KEY] = {
         "field": field,
         "question": question,
         "action": action,
+        "payload": payload,
         "candidates": [
             {"id": candidate.get("id"), "label": str(candidate.get("label", ""))}
             for candidate in (candidates or [])[:_EXPECTATION_CANDIDATE_CAP]

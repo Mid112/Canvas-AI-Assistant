@@ -82,7 +82,10 @@ def test_clarify_records_candidates_so_a_one_word_reply_lands():
         course, "testing event 2", [(9, "Baking 101", "Testing Event 2")]
     )
 
-    assert result["clarify_field"] == "course_name"
+    # Its own field, not a generic course-name clarify: this one is a yes/no
+    # offer whose answer switches the conversation and resumes the
+    # interrupted request, which no other clarify does.
+    assert result["clarify_field"] == "course_switch"
     assert result["clarify_candidates"] == [{"id": 9, "label": "Baking 101"}]
 
 

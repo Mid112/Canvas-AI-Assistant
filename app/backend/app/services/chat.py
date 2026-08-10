@@ -78,6 +78,7 @@ from app.services.field_memory import (
     merge_grounded_facts_into_memory,
     merge_read_result_into_field_memory,
     pending_expectation,
+    read_yes_no,
     record_course_context,
     record_pending_expectation,
     resolve_against_expectation,
@@ -1631,10 +1632,171 @@ async def _find_assignment_in_other_courses(
     return matches
 
 
+COURSE_SWITCH_EXPECTATION_FIELD = "course_switch"
+
+
+def _empty_filter_switch_offer(
+    course: Course,
+    assignment_name: str,
+    criterion: str,
+    elsewhere: list[tuple[int, str, str]],
+    user_message: str,
+) -> dict | None:
+    """Offer a course switch when a filter matched nobody here but the same
+    assignment name exists elsewhere.
+
+    Only offered when the peek is cheap and the evidence is real. "No students
+    matched" is usually a true answer about the right course — everyone
+    submitted, nobody scored in that band — and turning every empty result
+    into "did you mean another course?" would be noise on the common case.
+    What makes it worth raising is the *assignment name existing in another
+    course*, which is the same signal the unresolvable-assignment path uses,
+    and which is answered from local rows without touching Canvas.
+
+    Returns None when there is nothing to suggest, so the caller keeps its
+    ordinary empty-result wording.
+    """
+    if not elsewhere:
+        return None
+    if len(elsewhere) == 1:
+        _, other_course, other_title = elsewhere[0]
+        question = (
+            f'No students in {course.name} {criterion} for "{assignment_name}". '
+            f'There is also a "{other_title}" in {other_course} — '
+            "should I switch to it and check there?"
+        )
+    else:
+        options = ", ".join(sorted({name for _, name, _ in elsewhere}))
+        question = (
+            f'No students in {course.name} {criterion} for "{assignment_name}". '
+            f"An assignment with that name also exists in: {options}. "
+            "Which course did you mean?"
+        )
+    return {
+        "action": "clarify",
+        "clarify": True,
+        "question": question,
+        "partial_plan": {"assignment_reference": assignment_name},
+        "clarify_field": COURSE_SWITCH_EXPECTATION_FIELD,
+        "clarify_candidates": [
+            {"id": course_id, "label": course_name}
+            for course_id, course_name, _ in elsewhere
+        ],
+        "clarify_payload": {
+            "user_message": user_message,
+            "local_course_id": elsewhere[0][0] if len(elsewhere) == 1 else None,
+            "course_name": elsewhere[0][1] if len(elsewhere) == 1 else None,
+        },
+    }
+
+
+async def _apply_pending_course_switch(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    message: str,
+) -> tuple[dict | None, str, Conversation] | None:
+    """Read a reply to a pending "switch to <course>?" offer.
+
+    Returns None when there is no such offer or the reply isn't an answer to
+    it — the turn then proceeds untouched, so changing the subject mid-offer
+    still works. Otherwise returns (terminal_result, replay_message): a
+    terminal result for a decline, or (None, original_message) once the
+    switch is done and the interrupted request should be replayed.
+
+    Declining is a real answer, not just an absence of consent: it clears the
+    offer so the instructor isn't asked the same question forever.
+    """
+    expectation = pending_expectation(conversation.field_memory)
+    if not expectation or expectation.get("field") != COURSE_SWITCH_EXPECTATION_FIELD:
+        return None
+
+    payload = expectation.get("payload") or {}
+    target_course_id = _coerce_int(payload.get("local_course_id"))
+    original_message = payload.get("user_message") or ""
+    course_label = payload.get("course_name") or "that course"
+
+    answer = read_yes_no(message)
+    if answer is None:
+        # Not an answer. A named course still resolves it — "use capstone
+        # project" is a yes with the target spelled out — but anything else is
+        # the instructor moving on, and the offer is dropped rather than
+        # allowed to swallow the next request.
+        chosen = resolve_against_expectation(expectation, message)
+        if chosen is None or _coerce_int(chosen.get("id")) is None:
+            clear_pending_expectation(conversation)
+            return None
+        target_course_id = _coerce_int(chosen["id"])
+        course_label = chosen.get("label") or course_label
+        answer = True
+
+    clear_pending_expectation(conversation)
+
+    if not answer:
+        return (
+            {
+                "action": "respond",
+                "message": (
+                    f"Staying in {conversation.course_name or 'this course'}. "
+                    "Let me know what you'd like to do here instead."
+                ),
+            },
+            message,
+            conversation,
+        )
+
+    if target_course_id is None or not original_message:
+        # The offer is unusable without both halves; say so rather than
+        # switching to nothing or switching and then doing nothing.
+        return (
+            {
+                "action": "respond",
+                "message": (
+                    "I've lost track of which course that referred to — could "
+                    "you say the course and what you'd like me to do?"
+                ),
+            },
+            message,
+            conversation,
+        )
+
+    target = await db.get(Course, target_course_id)
+    if target is None or target.instructor_id != user.id:
+        # Ownership is re-checked at use, not trusted from stored memory —
+        # field_memory is per conversation, but a course id read back out of
+        # it must still belong to this instructor before anything is done in it.
+        return (
+            {
+                "action": "respond",
+                "message": "That course is no longer available on your account.",
+            },
+            message,
+            conversation,
+        )
+
+    # Route to that course's own conversation rather than re-pointing this one.
+    # This is what the tab strip is built on: "tabs never decide conversation
+    # identity — the server already routes a course switch to that course's
+    # conversation" (useChatTabs). Mutating in place would leave one
+    # conversation whose course changed underneath it, so the tab would keep
+    # showing a thread that no longer belongs to the course it claims.
+    target_conversation = await _find_or_fork_conversation_for_course(
+        db, user, target.id, target.name
+    )
+    # Stale ids from the old course must not survive the move (#1306) — the
+    # replayed request re-resolves everything against the new course.
+    clear_course_scoped_field_memory(conversation)
+    clear_pending_expectation(target_conversation)
+    await _sync_course_context_envelope(db, target_conversation, target.id)
+    print(f"Switched to {course_label}; continuing the original request")
+    return None, original_message, target_conversation
+
+
 def _assignment_elsewhere_clarify(
     course: Course,
     reference: str | None,
     elsewhere: list[tuple[int, str, str]],
+    user_message: str = "",
 ) -> dict:
     """Say which course actually has it, and let one word switch to it.
 
@@ -1664,11 +1826,20 @@ def _assignment_elsewhere_clarify(
         "clarify": True,
         "question": question,
         "partial_plan": {"assignment_reference": reference},
-        "clarify_field": "course_name",
+        "clarify_field": COURSE_SWITCH_EXPECTATION_FIELD,
         "clarify_candidates": [
             {"id": course_id, "label": course_name}
             for course_id, course_name, _ in elsewhere
         ],
+        # The interrupted request travels with the offer, so a bare "yes"
+        # switches AND carries on. Only meaningful when one course owns the
+        # assignment — with several, the reply names which one and that
+        # choice supplies the id instead.
+        "clarify_payload": {
+            "user_message": user_message,
+            "local_course_id": elsewhere[0][0] if len(elsewhere) == 1 else None,
+            "course_name": elsewhere[0][1] if len(elsewhere) == 1 else None,
+        },
     }
 
 
@@ -1757,7 +1928,9 @@ async def _resolve_course_and_assignment(
                 db, user, course.id, assignment_reference
             )
             if elsewhere:
-                return _assignment_elsewhere_clarify(course, assignment_reference, elsewhere)
+                return _assignment_elsewhere_clarify(
+                    course, assignment_reference, elsewhere, user_message
+                )
             return {
                 "action": "clarify",
                 "clarify": True,
@@ -1780,7 +1953,9 @@ async def _resolve_course_and_assignment(
                 db, user, course.id, assignment_reference
             )
             if elsewhere:
-                return _assignment_elsewhere_clarify(course, assignment_reference, elsewhere)
+                return _assignment_elsewhere_clarify(
+                    course, assignment_reference, elsewhere, user_message
+                )
             names = ", ".join(a["name"] for a in assignments)
             return {
                 "action": "clarify",
@@ -2000,6 +2175,22 @@ async def _run_resolve_missing_submissions_chain(
         ),
     )
 
+    if not matched:
+        # Nobody here matched. If the same assignment name lives in another
+        # course, that is worth raising before reporting an empty group —
+        # the instructor may simply be in the wrong course, which is invisible
+        # from a correct-looking "0 students" answer.
+        offer = _empty_filter_switch_offer(
+            course, assignment_name,
+            f"{status_label(statuses)} submissions",
+            await _find_assignment_in_other_courses(
+                db, user, course.id, assignment_name
+            ),
+            user_message,
+        )
+        if offer is not None:
+            return offer
+
     resolved_set = await create_resolved_set(
         db, conversation, kind=f"{slug}_submissions",
         query=query,
@@ -2177,6 +2368,22 @@ async def _run_resolve_score_range_chain(
 
     matched = decision.matched
     basis = decision.basis
+
+    if not matched:
+        # Same reasoning as the status resolver: an empty band in this course
+        # is a correct answer that hides a wrong-course request when the
+        # assignment name also exists elsewhere.
+        offer = _empty_filter_switch_offer(
+            course, assignment_name,
+            f"scored {format_range(low, high, basis)}",
+            await _find_assignment_in_other_courses(
+                db, user, course.id, assignment_name
+            ),
+            user_message,
+        )
+        if offer is not None:
+            return offer
+
     query = {
         "local_course_id": course.id,
         "assignment_id": assignment_id,
@@ -5119,6 +5326,33 @@ async def handle_chat_message(
     await _refresh_conversation_course_snapshot(db, conversation, user)
     history = await _get_recent_messages(db, conversation.id)
 
+    # An answer to a pending "switch course?" offer is handled before anything
+    # else in the turn. It has to run here, ahead of course resolution: "yes"
+    # names no course and describes no task, so every resolver downstream
+    # would read it as a fresh request against the SAME wrong course and
+    # produce the same dead-end reply — which is exactly the loop this whole
+    # mechanism exists to end.
+    switch_reply = await _apply_pending_course_switch(
+        db, user, conversation, message
+    )
+    if switch_reply is not None:
+        decision, replay_message, switch_conversation = switch_reply
+        if decision is not None:
+            return conversation, decision, False
+        # The turn continues in the target course's own conversation, and the
+        # message the instructor just sent moves with it — otherwise "yes"
+        # stays filed under the course they were leaving.
+        user_msg.conversation_id = switch_conversation.id
+        conversation = switch_conversation
+        # Confirmed: the conversation now points at the right course, and the
+        # instructor's ORIGINAL words are replayed through the normal pipeline
+        # rather than re-dispatched by hand. Reusing the real path means the
+        # continued workflow gets the same intent detection, resolvers and
+        # write-preview gating as if they had typed it in the right course to
+        # begin with.
+        message = replay_message
+        history = await _get_recent_messages(db, conversation.id)
+
     # Instructors choose a connected provider/model. Credentials are resolved
     # server-side from stored instructor keys or deployment secrets.
     try:
@@ -6039,6 +6273,11 @@ async def handle_chat_message(
                     question=result.get("question") or "",
                     candidates=clarify_candidates,
                     action=result.get("clarify_action"),
+                    # Only ever set by server-built clarifies (the course-switch
+                    # offer). Model-authored clarify payloads never reach this —
+                    # the key isn't in any action schema — so a replayed request
+                    # is always one the app itself chose to defer.
+                    payload=result.get("clarify_payload"),
                 )
         else:
             # Any settled turn answers the outstanding question or abandons it;
