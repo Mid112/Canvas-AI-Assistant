@@ -389,14 +389,6 @@ def _create_quiz_missing_field(proposed: dict) -> str | None:
     return None
 
 
-def _send_message_missing_field(proposed: dict) -> str | None:
-    for field in ("subject", "body"):
-        value = proposed.get(field)
-        if not isinstance(value, str) or not value.strip():
-            return field
-    return None
-
-
 def _normalize_due_date_for_user(
     due_date: str | None,
     user: User,
@@ -1323,25 +1315,18 @@ async def execute_tool(
                     _CREATE_QUIZ_FIELD_QUESTIONS,
                 )
 
-            if proposed.get("action") == "send_message":
-                missing_field = _send_message_missing_field(proposed)
-                if missing_field:
-                    partial_plan = {
-                        key: value
-                        for key, value in proposed.items()
-                        if key not in ("action", missing_field)
-                    }
-                    question = (
-                        "What should the message subject be?"
-                        if missing_field == "subject"
-                        else "What should the message say?"
-                    )
-                    return {
-                        "action": "clarify",
-                        "clarify": True,
-                        "question": question,
-                        "partial_plan": partial_plan,
-                    }
+            # send_message deliberately has no missing-field clarify, for the
+            # same reason create_quiz above doesn't: it hands off to the
+            # Messages compose form, which owns subject and body and lets the
+            # instructor edit both before anything is sent.
+            #
+            # Asking here was worse than useless. "Make an announcement saying
+            # the midterm is coming up" already contains the whole message, so
+            # answering "What should the message subject be?" made the
+            # instructor dictate, field by field, something they had just
+            # said in one sentence. chat.py now writes a real subject and body
+            # from that sentence before the preview is built, so the form
+            # opens pre-filled.
 
             if proposed.get("action") == "update_assignment":
                 editable_fields = (

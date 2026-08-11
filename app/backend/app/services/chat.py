@@ -105,6 +105,7 @@ from app.services.llm.student_context import (
     ground_assistant_result,
     llm_student_candidates,
 )
+from app.services.messages import draft_subject_and_body
 from app.services.quiz_validation import validate_quiz_for_create
 from app.services.reference_resolution import (
     ReferenceKind,
@@ -4292,6 +4293,77 @@ async def _supersede_stale_message_previews(
         stale.status = "superseded"
 
 
+def _is_blank(value: Any) -> bool:
+    return not isinstance(value, str) or not value.strip()
+
+
+async def _ensure_message_is_written(
+    action: Any, user_message: str, adapter: LLMAdapter
+) -> Any:
+    """Fill in a send_message's subject and body before anything downstream
+    looks at them, so the Messages compose form always opens on a real draft.
+
+    The model is allowed to emit a send_message carrying only recipients —
+    that is what makes "message everyone who missed the quiz" a single turn.
+    But nothing then wrote the message. The empty draft reached the Messages
+    tab, which filled the gap from its own template presets, and the
+    instructor was shown a subject of "Assignment Reminder: Course Update"
+    over a body reading "Remind students about the assignment, due date, and
+    any next steps." — a description of a message sitting in the field that
+    was about to be sent to a class.
+
+    The instructor's own sentence is the draft. "Make an announcement saying
+    the midterm exam 2 is coming up" is already the message; turning it into
+    "Midterm 2 Reminder" plus two sentences is writing, not guessing, and
+    every field stays editable in the form afterwards. What we do not do is
+    ask them for it field by field — that clarify used to live in the
+    dispatcher and has been removed.
+
+    Handles both the bare action and the intent_preview the system prompt
+    actually asks for, so there is one place this happens rather than one per
+    dispatch branch. Feedback is deliberately untouched: it is a different
+    action, written against a specific submission.
+    """
+    if action.action == "send_message":
+        proposed = action.model_dump()
+    elif (
+        action.action == "intent_preview"
+        and isinstance(getattr(action, "proposed_action", None), dict)
+        and action.proposed_action.get("action") == "send_message"
+    ):
+        proposed = dict(action.proposed_action)
+    else:
+        return action
+
+    directives = proposed.get("recipient_directives") or []
+    blank_directives = [d for d in directives if _is_blank(d.get("body"))]
+    subject_blank = _is_blank(proposed.get("subject"))
+    body_blank = _is_blank(proposed.get("body"))
+    if not (subject_blank or body_blank or blank_directives):
+        return action
+
+    # A subject has to describe the message that is actually going out, so
+    # when the model wrote a body and only skipped the subject, that body is
+    # the better prompt than the request that produced it.
+    source = proposed.get("body") if not body_blank else user_message
+    drafted_subject, drafted_body = await draft_subject_and_body(
+        source, adapter=adapter
+    )
+
+    if subject_blank:
+        proposed["subject"] = drafted_subject
+    if body_blank:
+        proposed["body"] = drafted_body
+    for directive in blank_directives:
+        directive["body"] = proposed["body"]
+    if directives:
+        proposed["recipient_directives"] = directives
+
+    if action.action == "send_message":
+        return parse_action(json.dumps(proposed))
+    return action.model_copy(update={"proposed_action": proposed})
+
+
 async def _run_send_message_chain(
     db: AsyncSession,
     user: User,
@@ -6455,6 +6527,11 @@ async def handle_chat_message(
                 # chains below) — so unwrap and dispatch directly instead
                 # of showing a pointless double preview.
                 action = parse_action(json.dumps(action.proposed_action))
+
+            # After the unwrap, so both the bare send_message and the wrapped
+            # one land here, and before any dispatch branch reads subject or
+            # body — the grouped chain copies them into every preview.
+            action = await _ensure_message_is_written(action, message, adapter)
 
             limited_reply = await _defer_canvas_limited_mode_reply(
                 db,
