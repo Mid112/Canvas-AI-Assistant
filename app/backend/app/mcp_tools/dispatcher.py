@@ -121,31 +121,32 @@ def parse_action(raw_llm_output: str) -> Any:
         )
 
 
-# Friendly clarifying questions / labels for create_assignment's fields,
-# keyed in the order they're checked. points_possible may be null for
-# ungraded assignments (Ticket 21) — ask graded-vs-ungraded when the model
-# hasn't addressed points at all, never invent a default like 10. Ticket 16
-# (#1440) asks for every still-missing required field in one clarify turn.
-_CREATE_ASSIGNMENT_FIELD_QUESTIONS = {
-    "title": "What should this assignment be called?",
-    "description": "What should the assignment description say?",
-    "due_date": "When is this assignment due?",
-    "points_possible": (
-        "Is this assignment graded? If yes, how many points is it worth? "
-        "If it's ungraded, say so — do not invent a point value."
-    ),
-}
+def _grade_target_is_unstated(proposed: dict) -> bool:
+    """True when nothing in the request says whose grade to change.
 
-_CREATE_ASSIGNMENT_FIELD_LABELS = {
-    "title": "title",
-    "description": "description",
-    "due_date": "due date",
-    "points_possible": "point value",
-}
+    Either half is enough to proceed: an assignment alone, or a student
+    alone, gives _resolve_grade_target something real to resolve against and
+    it can ask a much better question afterwards, with actual candidates.
+    Only a request naming neither has nothing to work from at all.
 
-# Kept for call-site compatibility; quiz field gathering happens in the
-# dedicated quiz creation form, not via chat clarify turns.
-_CREATE_QUIZ_FIELD_QUESTIONS: dict[str, str] = {}
+    References count as much as IDs on purpose — "raise Milliken's mark on
+    the limits homework" names both people and assignment perfectly well
+    without a Canvas ID in sight, and the resolvers exist precisely to turn
+    those words into IDs.
+    """
+    def stated(*keys: str) -> bool:
+        for key in keys:
+            value = proposed.get(key)
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            return True
+        return False
+
+    return not stated(
+        "assignment_id", "assignment_reference", "student_id", "student_reference"
+    )
 
 
 async def _call_mcp_tool(
@@ -309,84 +310,6 @@ def _map_mcp_submissions_result(mcp_result: dict[str, Any]) -> dict[str, Any]:
         "graded_students": groups["graded"],
         "excused_students": groups["excused"],
     }
-
-
-def _create_assignment_missing_fields(proposed: dict) -> list[str]:
-    """Returns every required create_assignment field that is missing or
-    effectively empty, in fixed check order. Empty list means complete.
-
-    This can't be left to schema validation alone: proposed_action is a
-    loosely typed dict at preview time (see the 'intent_preview' case
-    below), not validated against CreateAssignmentAction until confirm —
-    so a model can satisfy Pydantic's `str` type by emitting "" instead
-    of actually asking the user, which slips past AMBIGUITY CHECK and
-    REQUIRED FIELDS in the system prompt entirely undetected (observed in
-    practice with the instruct model). Checking here is a server-side
-    guarantee that doesn't depend on the model reliably following that
-    prompt instruction.
-
-    All missing required fields are returned together so the clarify
-    prompt can ask for them in one turn (Ticket 16 / #1440)."""
-    missing: list[str] = []
-    for field in ("title", "description", "due_date"):
-        value = proposed.get(field)
-        if not isinstance(value, str) or not value.strip():
-            missing.append(field)
-    # Ticket 21: missing key → ask graded-vs-ungraded. Explicit null means
-    # ungraded and is complete; never treat null as "default to 10 points".
-    if "points_possible" not in proposed:
-        missing.append("points_possible")
-    else:
-        points = proposed.get("points_possible")
-        if points is not None:
-            try:
-                if float(points) <= 0:
-                    missing.append("points_possible")
-            except (TypeError, ValueError):
-                missing.append("points_possible")
-    return missing
-
-
-def _create_assignment_missing_field(proposed: dict) -> str | None:
-    """Back-compat wrapper: first missing field, or None if complete."""
-    missing = _create_assignment_missing_fields(proposed)
-    return missing[0] if missing else None
-
-
-def _join_field_labels(labels: list[str]) -> str:
-    if len(labels) == 1:
-        return labels[0]
-    if len(labels) == 2:
-        return f"{labels[0]} and {labels[1]}"
-    return ", ".join(labels[:-1]) + f", and {labels[-1]}"
-
-
-def _build_create_assignment_missing_fields_question(
-    missing_fields: list[str],
-) -> str:
-    """One clarify question naming every missing required field."""
-    if len(missing_fields) == 1:
-        return _CREATE_ASSIGNMENT_FIELD_QUESTIONS[missing_fields[0]]
-
-    labels = [
-        _CREATE_ASSIGNMENT_FIELD_LABELS[field] for field in missing_fields
-    ]
-    return (
-        "To create this assignment I still need: "
-        f"{_join_field_labels(labels)}. "
-        "You can provide all of these in one message."
-    )
-
-
-def _create_quiz_missing_field(proposed: dict) -> str | None:
-    """Always None — quiz creation routes to the dedicated form.
-
-    Title, description, due date, points, and questions are validated by
-    the form (quizReviewSchema / validate_quiz_for_create), not via chat
-    clarify turns. Returning a missing field here would block navigateTo.
-    """
-    del proposed  # kept for call-site signature compatibility
-    return None
 
 
 def _normalize_due_date_for_user(
@@ -1267,24 +1190,21 @@ async def execute_tool(
                     exclude_workflow_id=exclude_workflow_id,
                 )
 
-            if proposed.get("action") == "create_assignment":
-                missing_fields = _create_assignment_missing_fields(proposed)
-                if missing_fields:
-                    missing_set = set(missing_fields)
-                    partial_plan = {
-                        key: value
-                        for key, value in proposed.items()
-                        if key != "action" and key not in missing_set
-                    }
-                    return {
-                        "action": "clarify",
-                        "clarify": True,
-                        "question": _build_create_assignment_missing_fields_question(
-                            missing_fields
-                        ),
-                        "partial_plan": partial_plan,
-                    }
-
+            if proposed.get("action") == "create_assignment" and str(
+                proposed.get("due_date") or ""
+            ).strip():
+                # No missing-field clarify — see FORM_HANDOFF_ACTIONS.
+                #
+                # The past-due-date check stays, because a date that has
+                # already gone is a wrong value rather than an absent one,
+                # and confirm would only refuse it later with less context.
+                # It is far quieter than it used to be: "March 21" typed in
+                # August now resolves to next March rather than to a date
+                # five months gone (see relative_dates.apply_year_preference),
+                # so this only fires when the instructor actually named a
+                # year that has passed, or said something like "last
+                # Saturday" — both cases where they meant something we
+                # should not silently rewrite.
                 preview_course = await _resolve_course(db, user, proposed["local_course_id"])
                 if _create_assignment_due_date_in_past(
                     proposed["due_date"],
@@ -1303,30 +1223,6 @@ async def execute_tool(
                         ),
                         "partial_plan": partial_plan,
                     }
-
-            if proposed.get("action") == "create_quiz":
-                # Always hand off to the quiz creation form — do not clarify
-                # for missing fields or past due dates here. The form's
-                # review schema and validate_quiz_for_create own that.
-                # Helpers retained (always-empty / always-None) so call sites
-                # and docs stay stable if clarification is reintroduced later.
-                _ = (
-                    _create_quiz_missing_field(proposed),
-                    _CREATE_QUIZ_FIELD_QUESTIONS,
-                )
-
-            # send_message deliberately has no missing-field clarify, for the
-            # same reason create_quiz above doesn't: it hands off to the
-            # Messages compose form, which owns subject and body and lets the
-            # instructor edit both before anything is sent.
-            #
-            # Asking here was worse than useless. "Make an announcement saying
-            # the midterm is coming up" already contains the whole message, so
-            # answering "What should the message subject be?" made the
-            # instructor dictate, field by field, something they had just
-            # said in one sentence. chat.py now writes a real subject and body
-            # from that sentence before the preview is built, so the form
-            # opens pre-filled.
 
             if proposed.get("action") == "update_assignment":
                 editable_fields = (
@@ -1347,40 +1243,40 @@ async def execute_tool(
                         },
                     }
 
-            if proposed.get("action") == "update_grade":
-                required_grade_fields = (
-                    (
-                        "assignment",
-                        proposed.get("assignment_id")
-                        or proposed.get("assignment_reference"),
-                        "Which assignment should I update the grade for?",
+            if proposed.get("action") == "update_grade" and _grade_target_is_unstated(
+                proposed
+            ):
+                # The only clarify left on a form-handoff action, and it asks
+                # for one thing: who is being graded, on what.
+                #
+                # It used to ask for three, one per turn, returning on the
+                # first gap — so "update a grade" cost three round trips
+                # before anything appeared. Two of those three were also
+                # duplicated work: assignment and student both have real
+                # resolvers (_resolve_grade_target fetches actual submissions
+                # and validates against them), so asking first threw away the
+                # resolution that was about to happen anyway.
+                #
+                # new_grade is deliberately NOT asked for here, even though it
+                # is required. There is nothing in the conversation to draft a
+                # grade from and inventing one is the single worst thing this
+                # system could do, so it belongs in the grading form where the
+                # instructor types it against the submission — not in a chat
+                # answer the model might paraphrase.
+                return {
+                    "action": "clarify",
+                    "clarify": True,
+                    "question": (
+                        "Which student's grade would you like to update, and "
+                        "on which assignment?"
                     ),
-                    (
-                        "student",
-                        proposed.get("student_id")
-                        or proposed.get("student_reference"),
-                        "Which student should receive this grade?",
-                    ),
-                    (
-                        "new_grade",
-                        proposed.get("new_grade"),
-                        "What grade should I enter?",
-                    ),
-                )
-                for field_name, value, question in required_grade_fields:
-                    if value is None or (
-                        isinstance(value, str) and not value.strip()
-                    ):
-                        return {
-                            "action": "clarify",
-                            "clarify": True,
-                            "question": question,
-                            "partial_plan": {
-                                key: item
-                                for key, item in proposed.items()
-                                if key not in ("action", field_name)
-                            },
-                        }
+                    "clarify_field": "grade_target",
+                    "partial_plan": {
+                        key: item
+                        for key, item in proposed.items()
+                        if key != "action"
+                    },
+                }
 
             if proposed.get("action") in WRITE_ACTIONS:
                 # proposed_action is a raw, unvalidated dict from the LLM's

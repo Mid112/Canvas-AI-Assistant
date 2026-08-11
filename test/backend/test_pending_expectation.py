@@ -325,11 +325,16 @@ def test_clarify_retries_are_capped_and_then_reach_the_instructor(client):
     assert mock_adapter.generate.await_count == 4
 
 
-# Verifies a missing-field clarify is still terminal. It has no candidates
-# because there is nothing to look up — only the instructor knows the answer,
-# and retrying would spend calls to ask them the same thing anyway.
+# Verifies a create_assignment missing a required field is terminal — and
+# that it now ends in a preview rather than a question.
+#
+# This used to assert the clarify. create_assignment is a FORM_HANDOFF_ACTION
+# now: a missing due date is collected on the assignment form, where it sits
+# next to every other field and can be filled in without spending a turn.
+# The terminality half of the original point still holds and is still worth
+# pinning — the turn resolves in one model call either way, with no retry.
 @pytest.mark.requirement("FR3.4")
-def test_missing_field_clarify_is_still_terminal(client):
+def test_create_assignment_missing_a_field_previews_and_is_terminal(client):
     headers, local_course_id = _register(client)
 
     body, mock_adapter = _chat(
@@ -339,6 +344,8 @@ def test_missing_field_clarify_is_still_terminal(client):
         ', "title": "Final", "description": "A final assessment for the term."}}',
     )
 
-    assert body["reply"].get("clarify") is True, body
-    assert "clarify_candidates" not in body["reply"]
+    assert body["reply"].get("clarify") is not True, body
+    assert body["reply"]["action"] == "intent_preview", body
+    # Title and description were both given, so nothing needed drafting and
+    # the turn still costs exactly one model call.
     assert mock_adapter.generate.await_count == 1

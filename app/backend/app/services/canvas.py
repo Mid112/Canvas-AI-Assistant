@@ -2113,6 +2113,23 @@ async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: As
             )
         )
 
+    # Repairs a connection saved before the timezone was read from the right
+    # Canvas endpoint. Piggybacks on the sync because this is already the
+    # cooldown-gated place we talk to Canvas on this connection's behalf, so
+    # it costs one extra request per cooldown window and nothing per turn.
+    # Never fatal: a due date resolved in UTC is the status quo, and losing
+    # the course sync to recover a display zone would be a bad trade.
+    from app.services.canvas_timezone import ensure_connection_time_zone
+
+    try:
+        await ensure_connection_time_zone(db, connection)
+    except Exception:
+        logger.warning(
+            "Could not backfill the Canvas timezone for connection %s.",
+            connection.id,
+            exc_info=True,
+        )
+
     connection.courses_synced_at = now
     await db.commit()
     return True

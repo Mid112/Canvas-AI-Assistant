@@ -52,6 +52,7 @@ from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
 from app.schemas.canvas import SubmissionStatus
+from app.services.assignment_draft import draft_assignment_content
 from app.services.assignment_rate import find_assignments_by_submission_rate
 from app.services.canvas import (
     CanvasTokenRequiredError,
@@ -106,6 +107,7 @@ from app.services.llm.student_context import (
     llm_student_candidates,
 )
 from app.services.messages import draft_subject_and_body
+from app.services.quiz_draft import draft_quiz_content
 from app.services.quiz_validation import validate_quiz_for_create
 from app.services.reference_resolution import (
     ReferenceKind,
@@ -4293,8 +4295,130 @@ async def _supersede_stale_message_previews(
         stale.status = "superseded"
 
 
+def _format_outstanding_question(expectation: dict[str, Any] | None) -> str:
+    """Tell the model it is mid-conversation, and about what.
+
+    The model sees the transcript, but a transcript does not say which line
+    is still waiting for an answer, and SCOPE CHECK runs before anything
+    else in the prompt. So a reply that only makes sense as an answer --
+    "monty python is a good childrens book", offered as an assignment
+    description -- was judged on its own as a request about a book, and
+    rejected as unrelated to Canvas. It was neither a request nor unrelated.
+
+    Stated as a fact about the conversation rather than an instruction to
+    obey, and left as "most likely" on purpose: an instructor is always
+    allowed to change the subject, and a rule that forced every reply to be
+    an answer would trap them in a question they no longer want.
+    """
+    if not expectation:
+        return ""
+    question = str(expectation.get("question") or "").strip()
+    if not question:
+        return ""
+    lines = [
+        "OUTSTANDING QUESTION:",
+        f'One turn ago you asked the instructor: "{question}"',
+        "Their next message is most likely the answer to it. Read it that way",
+        "first, and fold it into the request that was already in progress —",
+        "the details you had then are in FIELD MEMORY above.",
+        "An answer can look like anything, including a bare fragment or a",
+        "sentence with no Canvas words in it at all. It is still an answer, so",
+        "it is in scope: do not return out_of_scope for it.",
+        "If they have plainly moved on to something else, treat that as a new",
+        "request and let this question go.",
+    ]
+    return "\n".join(lines)
+
+
 def _is_blank(value: Any) -> bool:
     return not isinstance(value, str) or not value.strip()
+
+
+# The write actions whose text content is written from the instructor's
+# request rather than collected by asking. Mapped to the drafter that knows
+# how to write that kind of thing.
+_CONTENT_DRAFTERS = {
+    "create_assignment": draft_assignment_content,
+    "create_quiz": draft_quiz_content,
+}
+
+
+def _proposed_write(action: Any, names: Any) -> dict | None:
+    """The proposed write as a plain dict, whether it arrived bare or wrapped.
+
+    Both routes have to be covered here or the behaviour depends on whether
+    the model followed the system prompt that turn, which is exactly the
+    kind of difference that produces "it works when I say it one way".
+    """
+    if action.action in names:
+        return action.model_dump()
+    if (
+        action.action == "intent_preview"
+        and isinstance(getattr(action, "proposed_action", None), dict)
+        and action.proposed_action.get("action") in names
+    ):
+        return dict(action.proposed_action)
+    return None
+
+
+def _rebuild_with(action: Any, proposed: dict) -> Any:
+    if action.action == "intent_preview":
+        return action.model_copy(update={"proposed_action": proposed})
+    # model_copy rather than a re-parse, so filling a gap can never be the
+    # thing that fails the turn. CreateQuizAction.description carries
+    # min_length=20, and a drafter that came back with nineteen useful
+    # characters would raise here and lose a request that was fine before we
+    # tried to improve it. The schema minimums exist to stop the model
+    # emitting a one-word placeholder; the real gate is the validator at
+    # confirm (validate_quiz_for_create / validate_assignment_for_create),
+    # which still runs on whatever the instructor finally approves.
+    return action.model_copy(update=proposed)
+
+
+async def _ensure_write_content_is_drafted(
+    action: Any, user_message: str, adapter: LLMAdapter
+) -> Any:
+    """Write an assignment's or quiz's title and description before the
+    instructor is shown a preview of it.
+
+    This is what replaced the interrogation. create_assignment used to
+    refuse to go anywhere without a title, a description, a due date and a
+    point value, asking for each in turn -- so "create an assignment" cost
+    four round trips, and the third one failed outright: an instructor who
+    answered the description question with "monty python is a good childrens
+    book" got told their request was out of scope, because by then nothing
+    remembered that a description had been asked for.
+
+    Reading the whole request at once is also the only thing that can handle
+    an ambiguous phrase. "An assignment called September 11th due next
+    Friday" needs something to decide that the first date-shaped phrase is a
+    name and the second is a deadline; a question about one field at a time
+    never even poses that question. The model gets it wrong sometimes, and
+    that is fine -- it lands in a form field the instructor can correct in
+    one keystroke, which is cheaper than the round trip that asking would
+    have cost even when the answer was right.
+
+    Only fills what is missing, so a title the instructor actually typed is
+    never quietly rewritten into something the model preferred.
+    """
+    proposed = _proposed_write(action, _CONTENT_DRAFTERS)
+    if proposed is None:
+        return action
+
+    title_blank = _is_blank(proposed.get("title"))
+    description_blank = _is_blank(proposed.get("description"))
+    if not (title_blank or description_blank):
+        return action
+
+    drafter = _CONTENT_DRAFTERS[proposed["action"]]
+    drafted_title, drafted_description = await drafter(user_message, adapter=adapter)
+
+    if title_blank and drafted_title:
+        proposed["title"] = drafted_title
+    if description_blank and drafted_description:
+        proposed["description"] = drafted_description
+
+    return _rebuild_with(action, proposed)
 
 
 async def _ensure_message_is_written(
@@ -5357,22 +5481,42 @@ Put every field you already do have into partial_plan so the next turn
 doesn't lose it once the user answers. Do not re-ask for fields already
 present in partial_plan, FIELD MEMORY, or CONVERSATION HISTORY.
 
-REQUIRED FIELDS — before proposing any write action (create_assignment,
-update_assignment, create_quiz, send_message, update_grade), check every field listed as "required"
-in that action's schema below. This includes the action/task type itself
-(e.g. don't guess whether the user wants create_assignment vs
-create_quiz vs update_assignment), and fields like title, description, and due_date.
-(Exception: send_message's subject and body are optional — see
-SEND_MESSAGE HANDOFF below. create_quiz and update_grade also skip the
-missing-field clarify — see their HANDOFF sections.)
-If any required fields are missing or were not stated by the user, use the
-AMBIGUITY CHECK format to ask for all of them together. Never invent a
-placeholder value and never silently omit a required field from
-proposed_action.
-(create_quiz and update_grade are exceptions — see QUIZ ENGINES and
-UPDATE_GRADE HANDOFF below: always propose directly, never clarify only
-because required form fields are missing. The dedicated forms handle
-validation.)
+FORM HANDOFF — create_assignment, create_quiz, send_message and update_grade
+never clarify for missing fields. Propose them immediately with whatever the
+instructor gave you, however little that is.
+
+Each opens a dedicated page — the assignment form, the quiz review form, the
+Messages composer, the grading form — where every field is shown filled in
+and fully editable before anything is sent to Canvas. That page is where
+missing details get filled and wrong ones get corrected, and the app writes
+a title, description, subject or body from the instructor's own words before
+the page opens. Asking here instead costs a round trip to collect what they
+already said in their first sentence.
+
+So: "create an assignment" with no other detail is a complete request.
+Propose it. Do not ask for a title, a description, a due date or a point
+value, and do not invent them either — leave a field out and it gets
+written or filled in on the form.
+
+Read the whole request before deciding which phrase is which. The role a
+phrase plays is what identifies it, not how it looks:
+- "an assignment called September 11th due next Friday" — "called X" makes X
+  the title even though it looks like a date; "due Y" makes Y the due date.
+- "an assignment about September 11th" — "about X" makes X the subject
+  matter, so it belongs in the description, not the title.
+- "quiz on chapter 4, 20 points, Friday" — topic, points, due date, in one
+  line with no field names anywhere.
+If a phrase is genuinely ambiguous, choose the reading you think is most
+likely and propose it. Do not ask. The instructor will see your reading on
+the form and can change it in one edit, which is cheaper for them than
+answering a question.
+
+REQUIRED FIELDS — for write actions NOT in the list above (update_assignment),
+check every field listed as "required" in that action's schema below. This
+includes the action/task type itself (e.g. don't guess whether the user
+wants create_assignment vs create_quiz vs update_assignment). If any are
+missing, use the AMBIGUITY CHECK format to ask for all of them together.
+Never invent a placeholder value.
 
 INTENT PREVIEW — before executing a WRITE action:
 create_assignment, create_quiz, update_assignment, send_message, and update_grade change real Canvas
@@ -5388,17 +5532,17 @@ question-bank groups require real bank IDs selected by the instructor in
 the quiz review form. Never invent bank_id values or add question_bank_groups
 from natural-language guesses.
 
-IMPORTANT — create_quiz ALWAYS skips the AMBIGUITY CHECK. Even when the
-user gives only a partial request (e.g. "create a quiz" with no title or
-description), propose intent_preview immediately with whatever details you
-have. The quiz creation form opens with pre-filled values and handles all
-missing-field validation. Never ask clarifying questions for create_quiz:
-propose {"action": "intent_preview", "proposed_action": {"action": "create_quiz",
-...}} right away.
+create_quiz follows FORM HANDOFF above: propose immediately with whatever
+you have, never clarify for a missing title, description, due date or point
+value. The quiz review form owns those.
 
 UPDATE_GRADE HANDOFF:
-IMPORTANT — update_grade likewise skips the missing-field AMBIGUITY CHECK
-for grade or assignment-feedback requests. When the user asks to change
+update_grade follows FORM HANDOFF above, with one addition: never invent a
+grade. If the instructor did not say what the new grade is, leave new_grade
+out and propose anyway — they enter it in the grading form, against the
+submission they are actually looking at. A number you guessed here would be
+a real mark on a real student's record.
+When the user asks to change
 grades or add assignment feedback, propose update_grade immediately with
 whatever details you have instead of asking for missing assignment/student
 fields. Set assignment_reference to the user's own words (e.g. "all
@@ -6171,6 +6315,11 @@ async def handle_chat_message(
     field_memory_block = format_field_memory_for_prompt(conversation.field_memory)
     if field_memory_block:
         system_prompt = f"{system_prompt}\n\n{field_memory_block}"
+    outstanding_block = _format_outstanding_question(
+        pending_expectation(conversation.field_memory)
+    )
+    if outstanding_block:
+        system_prompt = f"{system_prompt}\n\n{outstanding_block}"
     # Resolve references the message already names before the model answers, so
     # it cannot ask for something it was just told. Skipped on a modify turn,
     # which is revising an already-resolved proposed action.
@@ -6532,6 +6681,7 @@ async def handle_chat_message(
             # one land here, and before any dispatch branch reads subject or
             # body — the grouped chain copies them into every preview.
             action = await _ensure_message_is_written(action, message, adapter)
+            action = await _ensure_write_content_is_drafted(action, message, adapter)
 
             limited_reply = await _defer_canvas_limited_mode_reply(
                 db,
@@ -6924,16 +7074,26 @@ async def handle_chat_message(
                 )
             # Remember what was asked and what was on offer, so a bare "the
             # second one" next turn is an answer rather than a new request.
-            # Only resolver clarifies carry candidates; a missing-field
-            # clarify ("what should the due date be?") has nothing to choose
-            # between and records nothing.
+            #
+            # Recorded for EVERY clarify, not just the ones offering a choice.
+            # It used to be candidates-only, on the reasoning that a
+            # question like "what should the due date be?" has nothing to
+            # choose between and so nothing worth storing. But the candidate
+            # list was never the valuable part — the question being
+            # outstanding was. Without it, the next turn saw a bare reply
+            # with no idea it was a reply, ran SCOPE CHECK on it, and an
+            # instructor who answered "what should the description say?"
+            # with "monty python is a good childrens book" was told their
+            # request was out of scope. It was a perfectly good answer to a
+            # question the assistant had asked one turn earlier and
+            # immediately forgotten.
             clarify_candidates = result.get("clarify_candidates")
-            if clarify_candidates:
+            if clarify_candidates or result.get("question"):
                 record_pending_expectation(
                     conversation,
                     field=result.get("clarify_field") or "",
                     question=result.get("question") or "",
-                    candidates=clarify_candidates,
+                    candidates=clarify_candidates or [],
                     action=result.get("clarify_action"),
                     # Only ever set by server-built clarifies (the course-switch
                     # offer). Model-authored clarify payloads never reach this —

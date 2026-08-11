@@ -652,3 +652,34 @@ WRITE_ACTIONS = frozenset(
 READ_ACTIONS = frozenset(
     name for name, kind in ACTION_CLASSIFICATION.items() if kind == "read_only"
 )
+
+# Writes whose fields are gathered on a dedicated page, not by asking the
+# instructor one question at a time in chat.
+#
+# Each of these used to make its own case for this, in its own comment, at
+# its own call site — and each arrived at it separately, after the same bug
+# was reported against it. The interrogation is the thing worth naming once:
+# a chat turn that answers "What should the message subject be?", then "And
+# the body?", then "How many points?" costs four round trips to collect what
+# the instructor said in their first sentence, and every one of those turns
+# is a fresh chance for the model to lose the thread. ("monty python is a
+# good childrens book", offered as a description, came back as
+# out_of_scope — the model had no record that a description had been asked
+# for, so it applied SCOPE CHECK to a sentence about a book.)
+#
+# What replaces it: the model proposes with whatever it understood, the
+# server drafts what is missing from the instructor's own words, and the
+# form opens pre-filled and fully editable. Correcting a filled field is one
+# keystroke; answering a question is a round trip. That trade is why an
+# ambiguous phrase — "an assignment called September 11th" — no longer needs
+# to be resolved before the instructor sees it.
+#
+# Nothing here weakens the write gate. Every one of these is still in
+# WRITE_ACTIONS, still goes through intent_preview → confirm, and still
+# passes its own validator (validate_assignment_for_create,
+# validate_quiz_for_create, validate_message_for_send) before Canvas is
+# touched. Those validators are what actually guarantee a required field is
+# present; the chat clarify only ever guessed at it earlier and less well.
+FORM_HANDOFF_ACTIONS = frozenset(
+    {"create_assignment", "create_quiz", "send_message", "update_grade"}
+)

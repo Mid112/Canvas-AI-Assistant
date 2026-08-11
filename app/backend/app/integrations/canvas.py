@@ -199,17 +199,49 @@ async def validate_token(token: str, canvas_url: str) -> None:
 
 
 async def fetch_self(token: str, canvas_url: str) -> dict:
-    """Returns the Canvas profile of the user the token authenticates as.
+    """Returns the Canvas User of the account the token authenticates as.
 
     This is the authoritative "who am I" for the connected Canvas account —
     used to tell the instructor's own conversation messages apart from
-    students', since our local user.canvas_user_id is often unset."""
+    students', since our local user.canvas_user_id is often unset.
+
+    Note this is the User object, not the Profile: it carries id, name and
+    login but NOT time_zone. See fetch_self_profile."""
+    return await _fetch_self_endpoint(token, canvas_url, "/api/v1/users/self")
+
+
+async def fetch_self_profile(token: str, canvas_url: str) -> dict:
+    """Returns the Canvas Profile of the account the token authenticates as.
+
+    Separate from fetch_self because Canvas splits these across two
+    endpoints and only this one carries ``time_zone``. /api/v1/users/self
+    returns a User, whose fields are id, name, sortable_name, login_id,
+    sis_user_id, integration_id, locale and permissions — no timezone, not
+    under any name.
+
+    That is the whole of the timezone bug. fetch_canvas_time_zone read
+    ``time_zone`` off fetch_self, which never contained it, so the lookup
+    returned None on every connection ever saved — 0 of 2431 rows in the
+    dev database had a zone. Everything downstream then fell back to
+    interpreting the instructor's wall clock as UTC, which is how a 23:59
+    Vancouver deadline became 11:59 PM UTC on the confirm card: correct
+    arithmetic on a zone we never actually had.
+
+    The unit test did not catch it because it mocked fetch_self returning
+    {"time_zone": ...} — a payload real Canvas does not produce — so it
+    proved the plumbing below the fetch and nothing about the fetch."""
+    return await _fetch_self_endpoint(
+        token, canvas_url, "/api/v1/users/self/profile"
+    )
+
+
+async def _fetch_self_endpoint(token: str, canvas_url: str, path: str) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await _get_with_retry(
                 client,
-                f"{canvas_url}/api/v1/users/self",
+                f"{canvas_url}{path}",
                 headers=_headers(token),
             )
             _raise_for_canvas_error(response)

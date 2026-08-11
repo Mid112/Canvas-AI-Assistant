@@ -329,31 +329,45 @@ def test_non_preview_modify_supersedes_pending_workflow(client):
 
 
 # Verifies: Incomplete create assignment is clarified not previewed.
-def test_incomplete_create_assignment_is_clarified_not_previewed(client):
-    """Regression test: a model can technically satisfy Pydantic's `str`
-    type for a required field (e.g. description) by emitting "" instead
-    of asking, since proposed_action isn't validated against
-    CreateAssignmentAction's schema until confirm time. This must be
-    caught before a preview is ever shown, not just documented as a
-    system prompt instruction the model might not follow.
+def test_incomplete_create_assignment_is_drafted_not_clarified(client):
+    """An incomplete create_assignment produces a filled-in preview, not a
+    question.
 
-    Ticket 16 / #1440: when description and points are both missing,
-    the clarify question must list both so the user can answer once.
+    This asserted the opposite until create_assignment became a
+    FORM_HANDOFF_ACTION. The old contract was that an empty description had
+    to be caught before any preview was shown, on the reasoning that a model
+    can satisfy Pydantic's `str` with "" instead of asking. That reasoning
+    was sound about the risk and wrong about the remedy: the description
+    still must not be empty at write time, and
+    validate_assignment_for_create still refuses one — but a gap is
+    something to *fill*, from what the instructor already said, rather than
+    something to interrogate them about one field at a time.
 
-    "Missing" for points means the model never addressed points at all —
-    i.e. the key is absent. Ticket 21 later gave an explicit null its own
-    meaning ("ungraded", and complete), so this case omits the key rather
-    than sending null; test_explicit_null_points_is_treated_as_ungraded
-    covers the other side."""
+    The adapter is routed by system prompt rather than by call order,
+    because the turn now makes two model calls: the planner's, and the
+    drafter's.
+    """
     headers, local_course_id = _register_with_canvas(client)
 
-    mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = (
+    planner = (
         '{"action": "intent_preview", "summary": "Create test4 due November 20th.", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_course_id}, "title": "test4", '
         '"description": "", "due_date": "2030-11-20"}}'
     )
+    drafted = (
+        '{"title": "test4", "description": "Answer the four questions from '
+        'this week\'s reading and submit a short write-up."}'
+    )
+
+    mock_adapter = AsyncMock()
+
+    async def generate(system_prompt, user_prompt, *args, **kwargs):
+        if "draft Canvas assignments" in system_prompt:
+            return drafted
+        return planner
+
+    mock_adapter.generate.side_effect = generate
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
         response = client.post(
             "/api/v1/chat/",
@@ -363,15 +377,11 @@ def test_incomplete_create_assignment_is_clarified_not_previewed(client):
 
     assert response.status_code == 200
     reply = response.json()["reply"]
-    assert reply["action"] == "clarify"
-    question = reply["question"].lower()
-    assert "description" in question
-    assert "point" in question
-    assert "one message" in question
-    assert reply["partial_plan"]["title"] == "test4"
-    assert "description" not in reply["partial_plan"]
-    assert "points_possible" not in reply["partial_plan"]
-    assert "intent_preview" not in reply
+    assert reply["action"] == "intent_preview", reply
+    assert reply.get("clarify") is not True
+    proposed = reply["proposed_action"]
+    assert proposed["title"] == "test4"
+    assert proposed["description"].startswith("Answer the four questions")
 
 
 def test_explicit_null_points_is_treated_as_ungraded_not_missing(client):
