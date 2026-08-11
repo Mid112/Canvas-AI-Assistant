@@ -1528,11 +1528,19 @@ async def update_course_assignment(
     elif due_at is not None:
         due_at = due_at.astimezone(UTC)
 
+    # Fetched unconditionally, not only to fill in absent points: the
+    # idempotency key below has to describe the transition, not the
+    # destination. Holding only the destination, a rename to "cherry mango
+    # pie", back to "banana bread", then to "cherry mango pie" again collapses
+    # onto a single key, and the third write replays the cached response
+    # instead of calling Canvas — the app reports success while Canvas still
+    # holds the old title. The same defect stopped grade 18→19→16→19 at 16.
+    current = await get_assignment(
+        course.id, assignment_id, user, resolved_canvas_url, db
+    )
+
     points_possible = payload.points_possible
     if points_possible is None:
-        current = await get_assignment(
-            course.id, assignment_id, user, resolved_canvas_url, db
-        )
         points_possible = current.points_possible
 
     merged = AssignmentUpdate(
@@ -1547,6 +1555,10 @@ async def update_course_assignment(
         user.id,
         course.id,
         assignment_id,
+        current.name,
+        current.description,
+        current.due_at.isoformat() if current.due_at else None,
+        current.points_possible,
         merged.model_dump(mode="json"),
     )
 

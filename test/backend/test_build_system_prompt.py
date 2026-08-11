@@ -18,15 +18,33 @@ def test_build_system_prompt_without_token_includes_canvas_gate():
     assert "Do not propose or execute any Canvas-touching action" in prompt
 
 
-def test_build_system_prompt_distinguishes_assignment_feedback_from_private_message():
-    # Covers the reviewer clarification request: the model prompt tells chat to
-    # ask whether the instructor means assignment feedback or a private message.
-    prompt = build_system_prompt()
-    normalized_prompt = " ".join(prompt.split())
+def test_feedback_means_the_grades_tab_and_is_never_put_to_a_vote():
+    """The prompt used to tell the model to ask whether "give feedback" meant a
+    submission comment or a private message. It asked, and then acted on the
+    answer to its own question: "can you send feedback to students" became
+    "Send 'Course Progress Update' as a private Canvas message". The instructor
+    had already said feedback. Feedback is the Grades tab."""
+    normalized_prompt = " ".join(build_system_prompt().split())
 
-    assert "assignment feedback on a submission" in normalized_prompt
-    assert "send a private message to the student" in normalized_prompt
-    assert "Do not guess between update_grade and send_message" in normalized_prompt
+    assert "propose update_grade" in normalized_prompt
+    assert "Do NOT ask whether they meant a private message" in normalized_prompt
+    assert "Do not offer the instructor a choice between feedback and a private message" in (
+        normalized_prompt
+    )
+    # The old clarify wording must be gone, not merely outweighed by the new.
+    assert "assignment feedback on a submission or a private message" not in normalized_prompt
+    assert "Do not guess between update_grade and send_message" not in normalized_prompt
+
+
+def test_the_model_is_told_it_cannot_confirm_a_name_exists():
+    """"update the assignment Oregon" came back as "I have the assignment
+    'Oregon'" for an assignment that does not exist, with an invented list of
+    alternatives. The model cannot see Canvas; only the app resolves names."""
+    normalized_prompt = " ".join(build_system_prompt().split())
+
+    assert "NAMES ARE REFERENCES, NOT FACTS" in normalized_prompt
+    assert 'Never write "I have the assignment X"' in normalized_prompt
+    assert "any list you produce is invented" in normalized_prompt
 
 
 def test_every_form_handoff_action_is_exempt_from_the_ambiguity_check():
@@ -57,14 +75,9 @@ def test_build_system_prompt_routes_grade_requests_to_grades_tab_handoff():
     assert "Do not clarify only because update_grade is missing" in normalized_prompt
 
 
-def test_build_system_prompt_keeps_feedback_message_clarification_exception():
-    # Covers the nuance: update_grade skips missing field clarification, but
-    # vague feedback/note wording still asks assignment feedback vs private DM.
-    prompt = build_system_prompt()
-    normalized_prompt = " ".join(prompt.split())
-
-    assert "Exception: if the user asks to \"give feedback\"" in normalized_prompt
-    assert "assignment feedback on a submission or a private message" in normalized_prompt
+# The feedback-vs-private-message clarification this file used to assert is
+# deliberately gone; test_feedback_means_the_grades_tab_and_is_never_put_to_a_vote
+# above pins its removal.
 
 
 def test_build_system_prompt_asks_for_all_missing_required_fields_together():

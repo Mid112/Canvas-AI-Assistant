@@ -753,7 +753,12 @@ async def test_update_course_assignment_calls_integration():
     user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
     raw = {"id": 30, "name": "Updated", "course_id": 100}
     payload = AssignmentUpdate(name="Updated")
-    current = SimpleNamespace(points_possible=50.0)
+    # Shaped like the AssignmentResponse the real get_assignment returns: the
+    # idempotency key reads the pre-write title/description/due date too, so a
+    # points-only stand-in no longer stands in for one.
+    current = SimpleNamespace(
+        name="Original", description=None, due_at=None, points_possible=50.0
+    )
 
     with (
         patch(

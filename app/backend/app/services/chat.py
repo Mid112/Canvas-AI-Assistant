@@ -1509,7 +1509,15 @@ async def _resolve_assignment_reference(
     (constructing the listing, the single-assignment shortcut) — not just
     the LLM call itself."""
     try:
-        if len(assignments) == 1:
+        # A course holding exactly one assignment used to short-circuit to it
+        # whatever the instructor typed, so "update the assignment tiger" in a
+        # course whose only assignment is "Midterm 1" resolved to Midterm 1 and
+        # walked straight into a write preview. The shortcut is only sound when
+        # no particular assignment was named -- "the assignment" in a
+        # one-assignment course really can only mean that one. A reference the
+        # instructor actually typed has to be checked like any other, and the
+        # resolver below answers null when it matches nothing.
+        if len(assignments) == 1 and not (reference or "").strip():
             return _coerce_int(assignments[0].get("id"))
 
         listing = "\n".join(
@@ -3560,6 +3568,50 @@ async def _run_create_chain(
     )
 
 
+async def _offer_to_create_missing_assignment(
+    db: AsyncSession, clarify: dict, reference: str | None
+) -> dict:
+    """Turn "which of these did you mean?" into "...or shall I create it?".
+
+    The shared resolver is written for reads, where a name matching nothing is
+    always a mis-reference: fetch_submissions for an assignment that doesn't
+    exist has nothing to offer but the list of ones that do. An update is not
+    like that. An instructor who says "update the assignment tiger" in a course
+    with no "tiger" has either mistyped an existing assignment or is thinking of
+    one they never created, and a bare list of other names only serves the
+    first. Naming the miss out loud also stops the next turn from quietly
+    adopting "tiger" as an established fact.
+
+    Only the update chain calls this, so read paths keep the original wording.
+    """
+    if clarify.get("clarify_field") != "assignment_reference":
+        return clarify
+    named = (reference or "").strip()
+    if not named:
+        return clarify
+
+    course_id = (clarify.get("partial_plan") or {}).get("local_course_id")
+    course_name = (
+        await db.scalar(select(Course.name).where(Course.id == course_id))
+        if course_id is not None
+        else None
+    )
+    where = f" in {course_name}" if course_name else ""
+    options = ", ".join(
+        str(candidate.get("label"))
+        for candidate in clarify.get("clarify_candidates") or []
+        if candidate.get("label")
+    )
+
+    offer = dict(clarify)
+    offer["question"] = f'I couldn\'t find an assignment called "{named}"{where}. ' + (
+        f'Did you mean one of these — {options} — or would you like me to create "{named}" instead?'
+        if options
+        else f'Would you like me to create "{named}" instead?'
+    )
+    return offer
+
+
 async def _run_update_assignment_chain(
     db: AsyncSession,
     user: User,
@@ -3586,7 +3638,9 @@ async def _run_update_assignment_chain(
         adapter,
     )
     if isinstance(resolved, dict):
-        return resolved
+        return await _offer_to_create_missing_assignment(
+            db, resolved, action.assignment_reference
+        )
     course, assignment_id = resolved
 
     assignment_row = await db.scalar(
@@ -3596,6 +3650,28 @@ async def _run_update_assignment_chain(
         )
     )
     assignment_name = assignment_row.title if assignment_row else None
+
+    # An update naming no field is not a small update, it is not an update at
+    # all. It used to reach the approval gate as "No fields were specified to
+    # update assignment 'Midterm 1'" — a write preview for a no-op, asking the
+    # instructor to approve nothing. Ask what to change instead.
+    if all(getattr(action, field) is None for field in _UPDATE_ASSIGNMENT_FIELDS):
+        return {
+            "action": "clarify",
+            "clarify": True,
+            "question": (
+                f"What would you like to change about \"{assignment_name}\"? "
+                "I can update the title, description, due date, or points possible."
+                if assignment_name
+                else "What would you like to change — title, description, due "
+                "date, or points possible?"
+            ),
+            "partial_plan": {
+                "local_course_id": course.id,
+                "assignment_id": assignment_id,
+                **({"assignment_name": assignment_name} if assignment_name else {}),
+            },
+        }
 
     proposed_action: dict[str, Any] = {
         "action": "update_assignment",
@@ -5826,6 +5902,17 @@ writing, roleplay, general coding help, personal advice, anything
 unrelated to teaching), respond ONLY with:
 {"action": "out_of_scope", "message": "<brief description of the request>"}
 
+NAMES ARE REFERENCES, NOT FACTS:
+A course, assignment or student name in the instructor's message is a
+reference the app still has to resolve against Canvas. You have not looked it
+up and you do not know it exists. Never write "I have the assignment X", "I
+have the student X", or anything else that states a named thing is real —
+repeat it as their words instead ("Which assignment did you mean?"). Echoing
+a name back as established fact is how a typo becomes a confirmed target.
+Never write a list of real assignment, course or student names yourself: you
+cannot see Canvas, so any list you produce is invented. Ask the bare question
+and let the app attach the real options.
+
 AMBIGUITY CHECK — if the request is in scope but missing information:
 This check does NOT apply to create_assignment, create_quiz, send_message or
 update_grade. Those never clarify for a missing field — see FORM HANDOFF.
@@ -5959,10 +6046,13 @@ words (e.g. "everyone", "all students"). The app resolves these server-side
 against real Canvas data and opens the dedicated Grades tab with the details
 pre-filled. Do not clarify only because update_grade is missing
 assignment_id, assignment_reference, student_id, or student_reference.
-Exception: if the user asks to "give feedback", "send feedback", or "leave
-a note" for a student but does not tie it to an assignment/submission/grade,
-ask whether they mean assignment feedback on a submission or a private
-message to the student.
+"Give feedback", "send feedback" and "leave a note" mean assignment feedback:
+propose update_grade. Feedback belongs in the Grades tab beside the mark it is
+about, and that is still true when the request ties itself to no assignment —
+the app resolves which one server-side. Do NOT ask whether they meant a
+private message. Use send_message only when the instructor asks for a message,
+DM, email or announcement in those words, or says to send one instead of
+feedback.
 
 SEND_MESSAGE HANDOFF:
 send_message follows FORM HANDOFF above. NEVER clarify for a missing subject
@@ -6302,11 +6392,10 @@ app already computed that exact set and will grade or comment on all of
 them. A handle is the only way to target a resolved group here; the sample
 is a truncated preview, so grading from it silently skips students. Never
 call fetch_students for grade updates.
-If the user asks to "give feedback", "send feedback", or "leave a note"
-for a student but does not tie it to an assignment/submission/grade, ask
-via clarify: "Do you want to add assignment feedback on a submission, or
-send a private message to the student?" Do not guess between update_grade
-and send_message in that ambiguous case.
+"Give feedback", "send feedback" and "leave a note" are update_grade, even
+when no assignment is named — see UPDATE_GRADE HANDOFF. Do not offer the
+instructor a choice between feedback and a private message; they already
+said feedback.
 
 MESSAGING STUDENTS:
 send_message can post a public class announcement, send a private Canvas
