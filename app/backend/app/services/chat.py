@@ -59,8 +59,12 @@ from app.services.assignment_draft import draft_assignment_content
 from app.services.assignment_rate import find_assignments_by_submission_rate
 from app.services.audience import (
     AudienceScope,
+    ResolvedAudience,
     bank_audience,
+    describe_excluded,
     read_audience_phrase,
+    resolve_score_audience,
+    resolve_status_audience,
     select_by_status,
 )
 from app.services.canvas import (
@@ -2917,6 +2921,20 @@ async def _run_resolve_score_range_chain(
             f'"{assignment_name}". {interpretation}'
         )
 
+    # Said out loud, always. A band excludes students who handed nothing in,
+    # because a missing-policy 0 is a record of absence rather than a score —
+    # but an instructor asking about "under 50" may well have been thinking of
+    # exactly those students, and an unexplained smaller number reads as the
+    # resolver having lost people rather than having deliberately held a
+    # different group back.
+    if decision.excluded_no_submission:
+        n = decision.excluded_no_submission
+        summary += (
+            f" {n} student(s) have not submitted and are not counted here — "
+            "their work has no score to fall in a band. Ask about missing "
+            "submissions to reach them."
+        )
+
     return {
         "action": "resolve_score_range",
         "local_course_id": course.id,
@@ -2931,6 +2949,7 @@ async def _run_resolve_score_range_chain(
         "basis_explanation": interpretation,
         "range_label": band,
         "count": len(matched),
+        "excluded_no_submission": decision.excluded_no_submission,
         "sample": sample,
         "handle": resolved_set.handle,
         "summary": summary,
@@ -3783,6 +3802,42 @@ async def _resolve_grade_target(
     )
     assignment_name = assignment_row.title if assignment_row else None
 
+    # A structured audience beats every phrase below it. The model states the
+    # criterion, the server checks it against live Canvas rows — which is the
+    # only way "give feedback to everyone who scored under 50" can work at
+    # all, since no amount of reading student_reference produces a score band.
+    audience_result = await _resolve_action_audience(
+        db, user, course, assignment_id, action, assignment_name=assignment_name
+    )
+    if audience_result is not None:
+        if audience_result.clarify is not None:
+            return audience_result.clarify
+        if not audience_result.recipients:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": (
+                    f"No students in {course.name} match that on "
+                    f"{assignment_name or 'that assignment'}, so there's nothing "
+                    "to apply it to. Who did you mean?"
+                ),
+                "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+            }
+        wanted = {r["user_id"] for r in audience_result.recipients}
+        targeted = [
+            s for s in submissions if _coerce_int(s.get("user_id")) in wanted
+        ]
+        result = await _grade_handoff_with_reusable_audience(
+            db, conversation, course, assignment_id, targeted, action,
+            assignment_name=assignment_name,
+        )
+        notes = (audience_result.basis_explanation or "") + describe_excluded(
+            audience_result.excluded_no_submission
+        )
+        if notes.strip() and isinstance(result.get("message"), str):
+            result["message"] = f"{result['message']} {notes.strip()}"
+        return result
+
     # A resolved set from an earlier resolve_missing_submissions /
     # resolve_score_range turn targets that whole group at once. Checked
     # before student_reference, because a handle is an exact set the app
@@ -4004,6 +4059,103 @@ def _grade_handoff_student_phrase(submissions: list[dict], student_count: int) -
     if len(names) == 2:
         return f"{names[0]} and {names[1]}"
     return f"{names[0]}, {names[1]}, and {names[2]}"
+
+
+async def _resolve_assignment_for_audience(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    course: Course,
+    assignment_reference: str | None,
+    user_message: str,
+    adapter: LLMAdapter,
+) -> int | dict | None:
+    """The assignment a status/score audience is about.
+
+    Reuses _resolve_course_and_assignment rather than adding a second way to
+    turn "baking 101" into an ID — same resolver, same clarify wording, same
+    cross-course handling as every other reference in the app. Returns the id,
+    or a clarify dict to pass straight back, or None when the request named no
+    assignment and the criterion cannot be evaluated without one.
+    """
+    resolved = await _resolve_course_and_assignment(
+        db, user, conversation, user_msg,
+        course.id, None, assignment_reference,
+        user_message, adapter,
+    )
+    if isinstance(resolved, dict):
+        return resolved
+    _course, assignment_id = resolved
+    return assignment_id
+
+
+async def _resolve_action_audience(
+    db: AsyncSession,
+    user: User,
+    course: Course,
+    assignment_id: int | None,
+    action: Any,
+    *,
+    assignment_name: str | None = None,
+) -> ResolvedAudience | None:
+    """Resolve an action's structured audience, or None if it has none.
+
+    One entry point for every channel. send_message and update_grade both
+    carry the same AudienceSpec, so "message everyone who scored under 50"
+    and "give feedback to everyone who scored under 50" resolve through
+    identical code against identical data — the channel decides how the
+    write is delivered, never who it reaches.
+
+    Returns None when the action carries no spec, which leaves every existing
+    path (named recipients, handles, directives) exactly as it was.
+    """
+    spec = getattr(action, "audience", None)
+    if spec is None:
+        return None
+
+    if spec.kind == "everyone":
+        names = await active_roster_names(course, user, db)
+        return ResolvedAudience(
+            recipients=[{"user_id": uid, "name": name} for uid, name in names.items()]
+        )
+
+    if spec.kind in ("submitted", "not_submitted"):
+        if assignment_id is None:
+            return None
+        return await resolve_status_audience(
+            db, user, course, assignment_id, submitted=spec.kind == "submitted"
+        )
+
+    if spec.kind == "score_range":
+        if assignment_id is None or spec.min_score is None or spec.max_score is None:
+            return None
+        points_possible = await _assignment_points_possible(db, course, assignment_id)
+        return await resolve_score_audience(
+            db, user, course, assignment_id,
+            min_score=spec.min_score,
+            max_score=spec.max_score,
+            basis=spec.basis,
+            points_possible=points_possible,
+            assignment_name=assignment_name,
+        )
+
+    # "named" stays with the resolvers that already handle names well —
+    # _resolve_recipient_directives and _resolve_students_via_llm — rather
+    # than being reimplemented here worse.
+    return None
+
+
+async def _assignment_points_possible(
+    db: AsyncSession, course: Course, assignment_id: int
+) -> float | None:
+    row = await db.scalar(
+        select(Assignment).where(
+            Assignment.course_id == course.id,
+            Assignment.canvas_assignment_id == str(assignment_id),
+        )
+    )
+    return getattr(row, "points_possible", None) if row else None
 
 
 async def _grade_handoff_with_reusable_audience(
@@ -4753,6 +4905,42 @@ async def _run_send_message_chain(
             recipient_ids=[int(s["canvas_user_id"]) for s in active],
             recipient_names=[s.get("name") or f"Student {s['canvas_user_id']}" for s in active],
         ))
+
+    # Same resolver the grade chain uses, same criterion, same data — so
+    # "message everyone who scored under 50" and "give them feedback instead"
+    # reach identical people. This is the half that simply did not exist:
+    # score-based groups resolved for reads and were unreachable from a write.
+    if getattr(action, "audience", None) is not None:
+        audience_assignment_id = None
+        if action.audience.kind in ("submitted", "not_submitted", "score_range"):
+            resolved_ref = await _resolve_assignment_for_audience(
+                db, user, conversation, user_msg, course,
+                action.audience.assignment_reference, user_message, adapter,
+            )
+            if isinstance(resolved_ref, dict):
+                return resolved_ref
+            audience_assignment_id = resolved_ref
+        resolved_audience = await _resolve_action_audience(
+            db, user, course, audience_assignment_id, action
+        )
+        if resolved_audience is not None:
+            if resolved_audience.clarify is not None:
+                return resolved_audience.clarify
+            if not resolved_audience.recipients:
+                return {
+                    "action": "clarify",
+                    "clarify": True,
+                    "question": (
+                        f"No students in {course.name} match that, so there's "
+                        "nobody to send this to. Who did you mean?"
+                    ),
+                    "partial_plan": {"local_course_id": course.id},
+                }
+            groups.append(MessageGroup(
+                body=action.body,
+                recipient_ids=[r["user_id"] for r in resolved_audience.recipients],
+                recipient_names=[r["name"] for r in resolved_audience.recipients],
+            ))
 
     directives = list(action.recipient_directives or [])
     if directives:
@@ -5757,6 +5945,34 @@ from natural-language guesses.
 create_quiz follows FORM HANDOFF above: propose immediately with whatever
 you have, never clarify for a missing title, description, due date or point
 value. The quiz review form owns those.
+
+WHO A WRITE IS FOR — the "audience" field:
+send_message and update_grade both take an "audience" object. Use it whenever
+the instructor describes WHO by a criterion rather than by naming people, and
+use the same object no matter which channel they picked:
+  {"kind": "everyone"}
+  {"kind": "submitted",     "assignment_reference": "baking 101"}
+  {"kind": "not_submitted", "assignment_reference": "lab 4"}
+  {"kind": "score_range", "min_score": 0, "max_score": 50,
+   "assignment_reference": "the midterm"}
+  {"kind": "named", "references": ["Yerdana", "Peter"]}
+
+"give feedback to everyone who scored under 50" and "message everyone who
+scored under 50" carry the SAME audience — only the action differs. Do not
+describe a group in student_reference prose and hope it is understood; that
+field is for one named person.
+
+For score_range copy the instructor's two numbers exactly, and supply both
+ends: "under 50" is min 0 max 50, "above 80" is min 80 max 100. Set "basis"
+ONLY if they said the unit outright ("70 percent", "70 points"); otherwise
+leave it null so the server can work out which reading the assignment admits.
+On an assignment out of 200 the two readings select opposite halves of the
+class, so a guess there is not a small error.
+
+Students who submitted nothing are never in a score band — a missing
+submission scored 0 by Canvas policy is a record of absence, not a mark. The
+server excludes them and says how many; pass that on. If the instructor
+actually wants those students, that is {"kind": "not_submitted"}.
 
 REUSING A GROUP ACROSS CHANNELS:
 Working out who a request covers is the expensive part, so once the app has

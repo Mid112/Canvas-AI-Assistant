@@ -10,6 +10,7 @@ later turn can materialize it back out without re-deriving it or
 re-dumping it into context."""
 import secrets
 from collections.abc import Iterable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,7 @@ from app.services.canvas import get_submissions
 from app.services.score_range import (
     BasisDecision,
     ScoreBasis,
+    count_without_submission,
     looks_non_numeric,
     match_score_range,
     resolve_score_basis,
@@ -265,10 +267,19 @@ async def compute_submissions_by_score_range(
         if points_possible
         else None
     )
-    return resolve_score_basis(
+    decision = resolve_score_basis(
         low=low, high=high, points_possible=points_possible,
         percentage_matched=percentage_matched, points_matched=points_matched,
         requested_basis=requested_basis,
+    )
+    # Attached once here rather than at every BasisDecision construction
+    # inside resolve_score_basis: the count is a property of the submissions,
+    # and this is the only place that has them. replace() because the decision
+    # is frozen, which it should stay — the basis choice is a conclusion, not
+    # a mutable field.
+    return replace(
+        decision,
+        excluded_no_submission=count_without_submission(submissions, active_names),
     )
 
 

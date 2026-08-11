@@ -365,6 +365,45 @@ class UpdateAssignmentAction(BaseModel):
         return value if value is None else _normalize_due_date_str(value)
 
 
+class AudienceSpec(BaseModel):
+    """Who a write is for, stated structurally instead of in prose.
+
+    The server used to read this off a natural-language `student_reference`
+    with substring matching, which is the wrong division of labour twice over.
+    Understanding "all students who submitted to baking 101" is what a
+    language model is for; checking a criterion against real Canvas rows is
+    what a server is for. Swapping those gave us the worst of both: a matcher
+    that read any phrase starting with "all" and mentioning a student as the
+    whole roster, so a restrictive clause became decoration and six students
+    who submitted nothing were queued to be told "good job".
+
+    So the model says which KIND of group it heard and supplies the numbers;
+    resolve_audience does the selecting against live data. Neither side
+    guesses at the other's job, and adding a criterion means adding a kind
+    here rather than another phrase to a keyword list.
+
+    Same shape for every channel. A message, an announcement and assignment
+    feedback differ in how they reach students, not in who those students
+    are, so switching channel keeps the audience.
+    """
+
+    kind: Literal["everyone", "submitted", "not_submitted", "score_range", "named"]
+    # For "named": the instructor's own words for each person, one per entry.
+    # Resolved against the roster server-side — never a numeric ID you made up.
+    references: list[str] | None = None
+    # For "score_range". Copy the instructor's two numbers EXACTLY as said.
+    # An open-ended request still needs both ends: "under 50" is 0 to 50.
+    min_score: float | None = None
+    max_score: float | None = None
+    # Only when the instructor named the unit outright — "70 percent" or
+    # "70 points". Leave null otherwise: the server works out which reading
+    # the assignment's points_possible admits, and a guess here can select
+    # the exact opposite group of students on an assignment out of 200.
+    basis: Literal["percentage", "points"] | None = None
+    # Which assignment the criterion is about, in the instructor's words, when
+    # it differs from the one the action already targets.
+    assignment_reference: str | None = None
+
 class UpdateGradeAction(BaseModel):
     action: Literal["update_grade"] = "update_grade"
     local_course_id: int
@@ -380,6 +419,11 @@ class UpdateGradeAction(BaseModel):
     # never rebuild the group out of the result's "sample" names, which is a
     # truncated preview rather than the full set.
     recipient_handle: str | None = None
+    # Who this is for, when it is a group described by a criterion rather than
+    # named people — "give feedback to everyone who scored under 50". Resolved
+    # by resolve_audience against live Canvas data. The same field is on
+    # SendMessageAction, so changing channel does not change the audience.
+    audience: AudienceSpec | None = None
     # Optional because feedback without a grade is a real, already-supported
     # write: grade_management calls it feedback_only, GradeUpdateRequest
     # defaults posted_grade to "", and the dispatcher builds changed_fields
@@ -414,6 +458,7 @@ class UpdateGradeAction(BaseModel):
         if value is None:
             return ""
         return str(value).strip()
+
 
 
 class RecipientDirective(BaseModel):
@@ -466,6 +511,11 @@ class SendMessageAction(BaseModel):
     # the full roster server-side; never set recipient_canvas_user_ids
     # yourself to try to represent "everyone."
     broadcast_to_all_students: bool = False
+    # Who this is for, when it is a group described by a criterion rather than
+    # named people — "message everyone who scored between 70 and 90". Resolved
+    # by resolve_audience against live Canvas data. The same field is on
+    # UpdateGradeAction, so changing channel does not change the audience.
+    audience: AudienceSpec | None = None
     # True when the user wants BOTH a public announcement (using the
     # top-level subject/body) AND one or more targeted messages
     # (recipient_directives) sent in the same turn. Only meaningful

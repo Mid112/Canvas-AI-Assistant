@@ -35,6 +35,7 @@ ScoreBasis = Literal["percentage", "points"]
 __all__ = [
     "BasisDecision",
     "ScoreBasis",
+    "count_without_submission",
     "describe_basis",
     "detect_explicit_basis",
     "format_range",
@@ -43,10 +44,47 @@ __all__ = [
     "resolve_score_basis",
 ]
 
-# A score only means something once it exists. Unsubmitted/missing students
-# have no score, and an excused student's lingering score must never place
-# them in a band — they were explicitly taken out of the graded population.
-_EXCLUDED_STATUSES = frozenset({SubmissionStatus.excused})
+# A score only means something once it exists.
+#
+# The `score is None` check below was doing most of this work, and it is not
+# enough on its own. Canvas's missing-submission policy writes a real 0 onto
+# work that was never handed in, and _parse_submission_status ranks `missing`
+# above `graded`, so those arrive here as status=missing with score=0.0 —
+# numerically indistinguishable from a student who submitted and earned
+# nothing. "Students who scored under 50" would then sweep up everyone who
+# submitted nothing at all.
+#
+# Those are two different groups who need two different messages: "you're
+# struggling, here's help" is not what you send someone who simply did not
+# hand in. So absence is excluded from every band, and the caller is told how
+# many were left out — see BasisDecision.excluded_no_submission. Dropping them
+# silently would be its own version of the same mistake, because an
+# instructor who did mean to include them has no way to see that they weren't.
+#
+# An excused student's lingering score is excluded for the older reason: they
+# were explicitly taken out of the graded population.
+_NO_SUBMISSION_STATUSES = frozenset(
+    {SubmissionStatus.missing, SubmissionStatus.unsubmitted}
+)
+_EXCLUDED_STATUSES = _NO_SUBMISSION_STATUSES | frozenset({SubmissionStatus.excused})
+
+
+def count_without_submission(
+    submissions: Iterable[Any], active_names: dict[int, str]
+) -> int:
+    """Active students with nothing handed in, and therefore no score to band.
+
+    Counted rather than matched: they are held out of every reading, so the
+    only honest thing to do with them is say how many there were. Excused
+    students are not counted here — they were deliberately removed from the
+    graded population, which is a different fact about a different group.
+    """
+    return sum(
+        1
+        for s in submissions
+        if getattr(s, "user_id", None) in active_names
+        and getattr(s, "status", None) in _NO_SUBMISSION_STATUSES
+    )
 
 # Canvas reports pass/fail work as a grade of "complete"/"incomplete" with a
 # score of 1/0 alongside it. Those scores are real numbers, so a band like
@@ -84,6 +122,11 @@ class BasisDecision:
     matched: list[dict] = field(default_factory=list)
     percentage_matched: list[dict] | None = None
     points_matched: list[dict] = field(default_factory=list)
+    # Active students held out of every band because they have no submission
+    # to score — see _EXCLUDED_STATUSES. Reported so a band can never quietly
+    # shrink: "6 students have not submitted and are not counted here" is the
+    # difference between an instructor knowing about that group and not.
+    excluded_no_submission: int = 0
 
     @property
     def needs_clarification(self) -> bool:

@@ -46,7 +46,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.conversation import Conversation
 from app.schemas.canvas import SubmissionStatus
 from app.services.analysis import MISSING_STATUSES, SUBMITTED_STATUSES
-from app.services.resolved_set import create_resolved_set
+from app.services.resolved_set import (
+    active_roster_names,
+    compute_submissions_by_score_range,
+    compute_submissions_by_status_breakdown,
+    create_resolved_set,
+)
+from app.services.score_range import describe_basis, format_range
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +193,141 @@ def recipients_from_rows(rows: list[dict]) -> list[dict]:
             }
         )
     return recipients
+
+
+@dataclass
+class ResolvedAudience:
+    """Who a write reaches, once a criterion has met real Canvas data.
+
+    ``clarify`` carries a chat clarify dict when the criterion could not be
+    settled — an ambiguous percent-vs-points band is the main one — and the
+    caller returns it unchanged. Never both: an audience that needs asking
+    about has no recipients yet.
+    """
+
+    recipients: list[dict] = None  # type: ignore[assignment]
+    clarify: dict | None = None
+    # Active students held out because they have no submission to score. Said
+    # out loud by the caller; see score_range._EXCLUDED_STATUSES for why a
+    # missing-policy zero is not a score.
+    excluded_no_submission: int = 0
+    # How the band was read, when one was involved. Always reported: an
+    # auto-picked interpretation the instructor cannot see is one they cannot
+    # correct before the message goes out.
+    basis_explanation: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.recipients is None:
+            self.recipients = []
+
+
+async def resolve_score_audience(
+    db: AsyncSession,
+    user: Any,
+    course: Any,
+    assignment_id: int,
+    *,
+    min_score: float,
+    max_score: float,
+    basis: Any = None,
+    points_possible: float | None = None,
+    assignment_name: str | None = None,
+) -> ResolvedAudience:
+    """Students whose score falls in a band, for any channel.
+
+    This is the whole point of the module being shared. The percent-vs-points
+    decision, the exclusion of students with nothing handed in, and the
+    roster cross-reference were all already implemented once, for the read
+    path — "who scored under 50" as a question. A write asking the same
+    question ("message everyone who scored under 50") had no way to reach
+    them, so score-based audiences worked for reads and silently did not
+    exist for writes.
+
+    Returns a clarify rather than picking when both readings of the band are
+    live and select different students. On an assignment out of 200, 70-90
+    percent and 70-90 points are opposite halves of the class, and guessing
+    would message the precise inverse of the intended group.
+    """
+    decision = await compute_submissions_by_score_range(
+        course,
+        assignment_id,
+        user,
+        db,
+        low=min_score,
+        high=max_score,
+        points_possible=points_possible,
+        requested_basis=basis,
+    )
+
+    label = assignment_name or "that assignment"
+    if decision.needs_clarification:
+        return ResolvedAudience(
+            clarify={
+                "action": "clarify",
+                "clarify": True,
+                "question": (
+                    f"Did you mean {format_range(min_score, max_score, 'percentage')} "
+                    f"or {format_range(min_score, max_score, 'points')} on {label}? "
+                    "The two pick out different students here."
+                ),
+                "clarify_field": "basis",
+                "clarify_candidates": [
+                    {"id": "percentage", "label": format_range(min_score, max_score, "percentage")},
+                    {"id": "points", "label": format_range(min_score, max_score, "points")},
+                ],
+                "partial_plan": {"local_course_id": course.id, "assignment_id": assignment_id},
+            }
+        )
+
+    return ResolvedAudience(
+        recipients=list(decision.matched),
+        excluded_no_submission=decision.excluded_no_submission,
+        basis_explanation=describe_basis(
+            decision, min_score, max_score, points_possible
+        ),
+    )
+
+
+async def resolve_status_audience(
+    db: AsyncSession,
+    user: Any,
+    course: Any,
+    assignment_id: int,
+    *,
+    submitted: bool,
+) -> ResolvedAudience:
+    """Students who did, or did not, hand the assignment in.
+
+    Reuses compute_submissions_by_status_breakdown for the "did not" half so
+    "missing" means the same thing here as in every analytics answer. The
+    "did" half is its complement against the active roster, which is the only
+    definition that stays consistent with it.
+    """
+    active_names = await active_roster_names(course, user, db)
+    absent, _counts = await compute_submissions_by_status_breakdown(
+        course, assignment_id, user, db, ("missing",), active_names=active_names
+    )
+    if not submitted:
+        return ResolvedAudience(recipients=list(absent))
+
+    absent_ids = {row["user_id"] for row in absent}
+    return ResolvedAudience(
+        recipients=[
+            {"user_id": user_id, "name": name}
+            for user_id, name in active_names.items()
+            if user_id not in absent_ids
+        ]
+    )
+
+
+def describe_excluded(count: int) -> str:
+    """The sentence that stops a band quietly shrinking."""
+    if not count:
+        return ""
+    return (
+        f" {count} student(s) have not submitted and are not included — their "
+        "work has no score to fall in a band."
+    )
 
 
 async def bank_audience(
