@@ -216,6 +216,51 @@ describe("ChatWindow", () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
+  // An action plan turn produces several cards. Auto-navigating on the first
+  // one renders it and abandons the rest — "create the assignment and message
+  // the class" would open the assignment form and the message would be gone,
+  // persisted on the server and never shown. A turn with several outcomes has
+  // no single destination.
+  it("stays in chat when a turn produced more than one card", async () => {
+    const user = userEvent.setup();
+    mockedSendAssistantMessage.mockResolvedValueOnce({
+      content: "I prepared the assignment.",
+      conversationId: 1,
+      navigateTo: {
+        path: "/instructor/assignments/create",
+        state: { aiAssignmentDraft: { title: "Lab 5" } },
+      },
+      additionalPreviews: [
+        {
+          content: "I prepared a message draft — open it to review and send.",
+          interpretedAction: {
+            action: "Send Message",
+            course: "Capstone Project",
+            affectedStudents: "Course-wide",
+            primaryLink: {
+              label: "Open message draft",
+              href: "/instructor/messages?tab=compose",
+            },
+          },
+        },
+      ],
+    });
+
+    renderWithInstitution(<ChatWindow />);
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "create a lab 5 assignment and tell the class about it",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByText("I prepared the assignment.")).toBeInTheDocument();
+    // The second half of the request is on screen, not lost to a redirect.
+    expect(
+      await screen.findByRole("link", { name: /Open message draft/i }),
+    ).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
   // Verifies: Keeps chat usable while active course context is loading.
   it("keeps chat usable while active course context is loading", async () => {
     const user = userEvent.setup();

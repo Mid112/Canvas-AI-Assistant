@@ -578,4 +578,97 @@ describe("InstructorCourseGradesPage", () => {
     expect(screen.getByRole("button", { name: "Preview feedback" })).toBeDisabled();
     expect(mockedPreviewGradeUpdate).not.toHaveBeenCalled();
   });
+
+  // A relative request ("add 1 mark to everyone who submitted") lands every
+  // student on a different number, so the assistant sends per-student targets
+  // rather than one grade. Those were parsed off the URL and then used only to
+  // work out the selection — the numbers themselves were dropped. The reported
+  // symptom was exact: feedback pasted in fine, the New grade box came up
+  // empty, and no grade ever changed.
+  describe("per-student grade targets from a relative request", () => {
+    beforeEach(() => {
+      mockedFetchSubmissions.mockResolvedValue([
+        {
+          id: 99, assignment_id: 10, user_id: 42, student_name: "Coin",
+          student_email: null, student_login_id: null,
+          submitted_at: "2026-01-01T00:00:00Z", workflow_state: "graded",
+          status: "graded", score: 40, grade: "40", graded_at: null,
+        },
+        {
+          id: 100, assignment_id: 10, user_id: 43, student_name: "Robin",
+          student_email: null, student_login_id: null,
+          submitted_at: "2026-01-01T00:00:00Z", workflow_state: "graded",
+          status: "graded", score: 90, grade: "90", graded_at: null,
+        },
+      ]);
+    });
+
+    it("sends each student their own grade instead of one shared value", async () => {
+      const user = userEvent.setup();
+      renderPage("/courses/7/grades?assignmentId=10&studentGrades=42:41,43:91&feedback=Nice+work.");
+
+      await screen.findByRole("cell", { name: "Coin" });
+      await waitFor(() => expect(screen.getByLabelText("Select Coin")).toBeChecked());
+
+      await user.click(screen.getByRole("button", { name: "Preview change" }));
+
+      await waitFor(() => expect(mockedPreviewGradeUpdate).toHaveBeenCalledTimes(2));
+      const sent = mockedPreviewGradeUpdate.mock.calls.map(([, payload]) => payload);
+      expect(sent).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ user_id: 42, posted_grade: "41", feedback: "Nice work." }),
+          expect.objectContaining({ user_id: 43, posted_grade: "91", feedback: "Nice work." }),
+        ]),
+      );
+    });
+
+    it("shows each target in the New column before preview", async () => {
+      // An instructor cannot approve what they cannot see, and which mark each
+      // student lands on IS the change being approved.
+      renderPage("/courses/7/grades?assignmentId=10&studentGrades=42:41,43:91");
+
+      const coinRow = await screen.findByRole("row", { name: /Coin/ });
+      const robinRow = screen.getByRole("row", { name: /Robin/ });
+
+      expect(within(coinRow).getByRole("cell", { name: "41" })).toBeInTheDocument();
+      expect(within(robinRow).getByRole("cell", { name: "91" })).toBeInTheDocument();
+    });
+
+    it("puts a uniform target in the shared box rather than a column of copies", async () => {
+      renderPage("/courses/7/grades?assignmentId=10&studentGrades=42:85,43:85");
+
+      await screen.findByRole("cell", { name: "Coin" });
+      await waitFor(() => expect(screen.getByLabelText("New grade")).toHaveValue("85"));
+    });
+
+    it("lets one typed grade replace every per-student target", async () => {
+      // Otherwise the box looks inert: the instructor types 90, submits, and
+      // the students who had their own target still get it.
+      const user = userEvent.setup();
+      renderPage("/courses/7/grades?assignmentId=10&studentGrades=42:41,43:91");
+
+      await screen.findByRole("cell", { name: "Coin" });
+      await user.type(screen.getByLabelText("New grade"), "90");
+      await user.click(screen.getByRole("button", { name: "Preview change" }));
+
+      await waitFor(() => expect(mockedPreviewGradeUpdate).toHaveBeenCalledTimes(2));
+      const sent = mockedPreviewGradeUpdate.mock.calls.map(([, payload]) => payload);
+      expect(sent.every((payload) => payload.posted_grade === "90")).toBe(true);
+    });
+
+    it("rejects a malformed per-student target before any API call", async () => {
+      // Validating only the shared box would let this through the client
+      // checks and fail at the API halfway through a batch — some students
+      // written, some not.
+      renderPage("/courses/7/grades?assignmentId=10&studentGrades=42:41,43:not-a-grade");
+
+      await screen.findByRole("cell", { name: "Coin" });
+
+      expect(
+        await screen.findByText(/Use a numeric grade or a supported Canvas grade/i),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Preview change" })).toBeDisabled();
+      expect(mockedPreviewGradeUpdate).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -480,7 +480,15 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     (response: AssistantMessageResult) => {
       // Handoffs opt out explicitly when the instructor must review the chat
       // response before opening a dedicated form (for example, quiz drafts).
-      if (response.navigateTo && response.autoNavigate !== false) {
+      //
+      // A turn carrying more than one card never auto-navigates, whatever the
+      // first card would have done on its own: leaving chat here renders the
+      // primary and abandons the rest, so "create the assignment and message
+      // the class" would open the assignment form and the message would be
+      // gone — persisted on the server, never shown. There is no single
+      // destination for a turn with several outcomes.
+      const hasMoreCards = (response.additionalPreviews?.length ?? 0) > 0;
+      if (response.navigateTo && response.autoNavigate !== false && !hasMoreCards) {
         const briefMsg: ChatMessage = {
           id: createMessageId(),
           role: "assistant",

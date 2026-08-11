@@ -15,6 +15,13 @@ CONVERSATIONAL_ACTIONS = {
     # the action that gets classified is always the rewritten one. Classifying the
     # envelope itself would invent a risk level for something that never executes.
     "semantic_intent",
+    # Also an envelope: it holds ordinary actions and the step loop runs each
+    # one through the normal dispatch, so every step is classified on its own.
+    # Classifying the plan would be worse than redundant — READ_ACTIONS and
+    # WRITE_ACTIONS are both derived from ACTION_CLASSIFICATION, so a
+    # "read_only" entry here would put action_plan in READ_ACTIONS and the
+    # loop would treat a plan envelope as a chainable read of its own.
+    "action_plan",
 }
 
 

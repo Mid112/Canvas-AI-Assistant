@@ -699,6 +699,88 @@ describe("mapChatReply", () => {
       });
   });
 
+  // An action plan produces extra cards for any reply shape, not just an
+  // intent_preview. "Message them, then bump the grades" ends on a grade
+  // handoff, which is a plain respond -- and additional_previews used to be
+  // read only inside the intent_preview branch, so every card after the first
+  // was persisted by the backend, returned over the wire, and then silently
+  // dropped here.
+  it("keeps extra cards when the first result is not an intent_preview", () => {
+    const result = mapChatReply(
+      {
+        action: "respond",
+        message: "Adding 1 to 2 already-graded students in CPSC 310.",
+        grade_handoff: {
+          local_course_id: 5,
+          course_name: "CPSC 310",
+          assignment_id: 222,
+          student_ids: [11, 22],
+          student_count: 2,
+          new_grade: "+1",
+          grade_delta: 1,
+          student_grades: [
+            { user_id: 11, new_grade: "41" },
+            { user_id: 22, new_grade: "91" },
+          ],
+          feedback: "Nice work.",
+        },
+        additional_previews: [
+          {
+            intent_preview: true,
+            summary: "Send Marks Updated.",
+            proposed_action: {
+              action: "send_message",
+              local_course_id: 5,
+              subject: "Marks Updated",
+              body: "Your mark went up by 1.",
+              recipient_canvas_user_ids: [11, 22],
+            },
+            preview_metadata: { course: "CPSC 310" },
+          },
+        ],
+      },
+      false,
+      3,
+    );
+
+    expect(result.interpretedAction?.action).toBe("Update Grade");
+    expect(result.additionalPreviews).toHaveLength(1);
+    expect(result.additionalPreviews?.[0]?.interpretedAction?.action)
+      .toBe("Send Message");
+  });
+
+  it("carries per-student targets into the Grades tab link, not a single grade", () => {
+    // "+1" must never be prefilled as everyone's grade -- it would set the
+    // whole class to 1. The per-student targets go instead, and the grade
+    // param stays absent.
+    const result = mapChatReply(
+      {
+        action: "respond",
+        message: "Adding 1 to 2 already-graded students in CPSC 310.",
+        grade_handoff: {
+          local_course_id: 5,
+          course_name: "CPSC 310",
+          assignment_id: 222,
+          student_ids: [11, 22],
+          student_count: 2,
+          new_grade: "+1",
+          grade_delta: 1,
+          student_grades: [
+            { user_id: 11, new_grade: "41" },
+            { user_id: 22, new_grade: "91" },
+          ],
+          feedback: "Nice work.",
+        },
+      },
+      false,
+    );
+
+    const href = result.interpretedAction?.primaryLink?.href ?? "";
+    expect(href).toContain("studentGrades=11%3A41%2C22%3A91");
+    expect(href).not.toMatch(/[?&]grade=/);
+    expect(href).toContain("feedback=Nice+work.");
+  });
+
   // The assistant re-resolves the course from the message, so a preview can be
   // for a course other than the selected one — "create an assignment ... for
   // Capstone Project" while COSTCO is active. Surfacing the resolved id is

@@ -523,6 +523,58 @@ class SendMessageAction(BaseModel):
     also_announce_to_class: bool = False
 
 
+# How many actions one plan may LIST. Deliberately counts what the model
+# wrote, not what the server ends up running: a listed update_grade expands
+# into an assignment lookup, a submissions read, and only then the write, so
+# counting executed calls would let a three-action request hit a ten-call cap
+# for reasons the instructor cannot see or predict. The step loop's own
+# MAX_TURN_STEPS still bounds the real work; this bounds the ask.
+MAX_PLAN_ACTIONS = 10
+
+
+class ActionPlanAction(BaseModel):
+    """Two or more actions the instructor asked for in one sentence.
+
+    An envelope, not a tool: it holds ordinary actions and the server runs
+    them one at a time through the same dispatch every single-action turn
+    uses. Nothing here is a new Canvas capability, and nothing downstream
+    needs a combined "create the assignment AND message the class" function —
+    that shape is what this exists to avoid, since every new pairing would
+    need another one.
+
+    Deliberately absent from ACTION_CLASSIFICATION: it touches no Canvas
+    resource itself, so it belongs with intent_preview/clarify rather than in
+    READ_ACTIONS or WRITE_ACTIONS. Each step is classified on its own, and
+    each write step still reaches its own preview/approval gate.
+    """
+
+    action: Literal["action_plan"] = "action_plan"
+    # Plain English for the whole request, shown before the individual cards.
+    summary: str = ""
+    # Each entry is a complete, ordinary action object — the same JSON that
+    # would be valid on its own. Left as dicts rather than a union type on
+    # purpose: they are validated one at a time by parse_action as they are
+    # popped, so one malformed step fails as that step rather than rejecting
+    # the whole plan at the envelope.
+    steps: list[dict]
+
+    @field_validator("steps")
+    @classmethod
+    def _bounded_and_real(cls, value: list[dict]) -> list[dict]:
+        steps = [step for step in value if isinstance(step, dict) and step.get("action")]
+        if len(steps) < 2:
+            # A one-step plan is a plain action wearing an envelope. Rejecting
+            # it here keeps a single path for the single-action case rather
+            # than two that must be kept behaving identically.
+            raise ValueError("an action plan needs at least two steps")
+        if len(steps) > MAX_PLAN_ACTIONS:
+            raise ValueError(f"an action plan may list at most {MAX_PLAN_ACTIONS} steps")
+        if any(step.get("action") == "action_plan" for step in steps):
+            # A plan inside a plan would make the listed-step cap meaningless.
+            raise ValueError("an action plan cannot contain another action plan")
+        return steps
+
+
 class OutOfScopeAction(BaseModel):
     action: Literal["out_of_scope"] = "out_of_scope"
     # to filter out completely unrelated topics from starting and potentially diluting the chat
@@ -664,6 +716,7 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "intent_preview": IntentPreviewAction,
     "respond": RespondAction,
     "semantic_intent": SemanticIntentAction,
+    "action_plan": ActionPlanAction,
 }
 
 

@@ -26,8 +26,10 @@ from app.mcp_tools.schemas import (
     ACTION_SCHEMAS,
     FORM_HANDOFF_ACTIONS,
     FORM_OWNED_FIELDS,
+    MAX_PLAN_ACTIONS,
     READ_ACTIONS,
     WRITE_ACTIONS,
+    ActionPlanAction,
     AnalyzeCourseSubmissionsAction,
     FetchAssignmentsAction,
     FetchStudentsAction,
@@ -5029,11 +5031,54 @@ async def _run_send_message_chain(
             },
         }
 
+    # Bank who this reached, before the announcement group is appended below.
+    #
+    # The grade chain has done this since _grade_handoff_with_reusable_audience,
+    # and the asymmetry it fixed there was the same one left here: working out
+    # who a request covers is the expensive, error-prone half, and a channel
+    # that resolves a group and throws it away forces the next step to
+    # re-derive it. "Message everyone who scored under 50, then give those
+    # students feedback" needs the second half to address the exact set the
+    # first half reached — re-deriving is where a group silently changes size.
+    #
+    # Announcement groups are excluded on purpose: they have no recipient ids,
+    # and "everyone in the course" is not a resolved set worth reusing.
+    # Deduped across groups: a student who appears in two directives was
+    # messaged twice on purpose, but they are one person in the set, and a
+    # duplicate here would grade or count them twice on the next step.
+    addressed: list[dict] = []
+    seen_recipients: set[int] = set()
+    for group in groups:
+        for user_id, name in zip(group.recipient_ids, group.recipient_names, strict=False):
+            if user_id in seen_recipients:
+                continue
+            seen_recipients.add(user_id)
+            addressed.append({"user_id": user_id, "name": name})
+    recipient_handle = (
+        await bank_audience(
+            db,
+            conversation,
+            kind="message_recipients",
+            query={
+                "local_course_id": course.id,
+                "subject": action.subject,
+            },
+            rows=addressed,
+        )
+        if addressed
+        else None
+    )
+
     if action.also_announce_to_class or not groups:
         groups.append(MessageGroup(body=action.body, recipient_ids=[], recipient_names=[]))
 
     await _supersede_stale_message_previews(db, conversation, pending_message_id)
-    return _build_grouped_send_message_result(course, action.subject, groups)
+    result = _build_grouped_send_message_result(course, action.subject, groups)
+    if recipient_handle:
+        # Read by the step loop (_handle_from_result) to bind a later step's
+        # "those students". Informational to the client, which ignores it.
+        result["recipient_handle"] = recipient_handle
+    return result
 
 
 async def _persist_additional_message_previews(
@@ -5067,6 +5112,66 @@ async def _persist_additional_message_previews(
         )
         previews.append(result)
     return previews
+
+
+async def _persist_additional_plan_results(
+    db: AsyncSession,
+    conversation: Conversation,
+    user: User,
+    *,
+    source_user_message_id: int,
+    user_prompt: str,
+    results: list[dict],
+) -> list[dict]:
+    """Persists every plan result after the first, one Message row each.
+
+    The first result went through the ordinary single-result path in
+    handle_chat_message untouched; these are the rest of the same turn. They
+    are full reply payloads rather than a summary of one, because the client
+    maps each through exactly the same reader it uses for a single reply —
+    "send the message, then bump the grades" renders as a message card and a
+    grades card, not as one card describing two things.
+
+    Unlike _persist_additional_message_previews, which only ever handles
+    send_message groups and therefore never needs a Workflow row, a plan can
+    put anything after its first step. So a confirmable write here gets its
+    own Workflow and its own pending_message_id — without them the card would
+    render with a Confirm button wired to nothing, which is worse than not
+    offering one.
+    """
+    persisted: list[dict] = []
+    for entry in results:
+        # A grouped send_message inside a plan resolved to several distinct
+        # messages. Flatten them out here rather than nesting: the client
+        # renders one row per entry in this list, and a nested group would be
+        # a payload shape nothing reads.
+        groups = entry.pop("_extra_groups", None) or []
+        message_row = await log_message(
+            db, conversation, role="assistant", content=_json_dumps(entry)
+        )
+        proposed = entry.get("proposed_action") or {}
+        if entry.get("intent_preview") and proposed.get("action") not in {
+            "create_quiz",
+            "send_message",
+            "update_grade",
+        }:
+            preview_metadata = entry.get("preview_metadata") or {}
+            await _sync_workflow_for_preview(
+                db, conversation, user,
+                source_user_message_id=source_user_message_id,
+                pending_message_id=None,
+                preview_message_id=message_row.id,
+                user_prompt=user_prompt,
+                proposed_action=proposed,
+                affected_resources=preview_metadata.get("affected_resources", []),
+            )
+            entry["pending_message_id"] = message_row.id
+        persisted.append(entry)
+        if groups:
+            persisted.extend(
+                await _persist_additional_message_previews(db, conversation, groups)
+            )
+    return persisted
 
 
 async def _load_stored_intent_preview(
@@ -5381,6 +5486,113 @@ def _step_budget_exhausted_response(loop_steps: list[dict]) -> dict:
             message += f" Here's what I found so far: {last_summary}"
     message += " Could you narrow down what you'd like me to do next?"
     return {"action": "respond", "message": message}
+
+
+def _prepare_plan_steps(
+    plan: ActionPlanAction, envelope_course_name: str | None
+) -> list[dict]:
+    """The plan's steps, each made able to stand on its own.
+
+    A step is dispatched later, as its own envelope, with no memory of the
+    plan it came from — so anything the plan said once and the step assumed
+    has to be copied down now. In practice that is the course: the instructor
+    names it at the start of the sentence ("for COSC 499, create the
+    assignment and message everyone") and the model quite reasonably writes it
+    on the plan rather than repeating it on all four steps. Without this, step
+    two resolves against whatever course the conversation happened to be
+    pointing at.
+
+    A step that names its own course keeps it: "message COSC 499 and grade
+    COSC 310" is a legitimate plan, and the plan-level name must not overwrite
+    a step that disagreed with it on purpose.
+    """
+    steps = [dict(step) for step in plan.steps]
+    if envelope_course_name:
+        for step in steps:
+            step.setdefault("course_name", envelope_course_name)
+    return steps
+
+
+# What a plan step writes in recipient_handle to mean "the same people the
+# step before me just resolved".
+#
+# A plan is written all at once, before any of it runs, so a later step cannot
+# copy a real handle out of an earlier step's result — that result does not
+# exist yet. Without a stand-in, "message everyone who scored under 50, then
+# give those students feedback" makes the model re-describe the group from
+# memory on the second step, and a group described twice is a group that can
+# come back a different size. This is the same reuse the REUSING A GROUP
+# ACROSS CHANNELS prompt already asks for between turns, made available
+# within one.
+PREVIOUS_STEP_HANDLE = "previous_step"
+
+
+def _handle_from_result(result: dict) -> str | None:
+    """The resolved-set handle a step produced, wherever it put it.
+
+    Three shapes, because three chains bank an audience and each already had
+    its own place to say so: a resolver result carries "handle", a grade
+    handoff carries it inside grade_handoff, and a message chain carries it at
+    the top level. Read here rather than normalized at the source — moving any
+    of them would change a payload the client already reads.
+    """
+    if not isinstance(result, dict):
+        return None
+    for candidate in (
+        result.get("handle"),
+        result.get("recipient_handle"),
+        (result.get("grade_handoff") or {}).get("recipient_handle")
+        if isinstance(result.get("grade_handoff"), dict)
+        else None,
+    ):
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return None
+
+
+def _bind_plan_step_audience(step: dict, last_handle: str | None) -> dict | None:
+    """Point a step's "those students" at the group the last step resolved.
+
+    Returns the bound step, or None when it asked for a previous group and
+    there isn't one. None must stop the plan: send_message reads "no
+    recipients" as "announce to the whole class", so a reference that quietly
+    failed to bind would not narrow the audience — it would broadcast to
+    everyone, including the students the criterion was meant to exclude.
+    """
+    handle = step.get("recipient_handle")
+    if handle != PREVIOUS_STEP_HANDLE:
+        return step
+    if not last_handle:
+        return None
+    bound = dict(step)
+    bound["recipient_handle"] = last_handle
+    return bound
+
+
+def _plan_step_is_surfaced(action: Any, result: dict, *, is_last: bool) -> bool:
+    """Whether this plan step produced something the instructor must see.
+
+    Reads in the MIDDLE are excluded, and that exclusion is the whole
+    distinction: a read there is scaffolding for the write after it — the
+    submissions fetch behind "add a mark", the roster behind "message
+    everyone" — and rendering it would bury the cards that were actually asked
+    for under a wall of intermediate data. Its result still reaches the next
+    step via loop_steps, which is where it is useful.
+
+    A read at the END is not scaffolding, because nothing follows it to
+    consume the data. "Message everyone missing lab 4, then show me my
+    assignments" asked for that list, and dropping it would answer half the
+    request silently.
+
+    A clarify or an error is surfaced wherever it lands: it is the reason the
+    rest of the plan stopped, and dropping it would leave the turn ending with
+    no explanation at all.
+    """
+    if result.get("clarify") or result.get("error"):
+        return True
+    if getattr(action, "action", None) not in READ_ACTIONS:
+        return True
+    return is_last
 
 
 _STRUCTURED_ANALYTICS_ACTIONS = frozenset(
@@ -5877,7 +6089,14 @@ def build_system_prompt(has_canvas_token: bool = True) -> str:
         f"- {name}: {_schema_for_prompt(schema)}"
         for name, schema in ACTION_SCHEMAS.items()
         if name not in _MODEL_HIDDEN_ACTIONS
-        and name not in {"out_of_scope", "clarify", "intent_preview", "respond"}
+        # Envelopes, not tools. Each is documented in prose below, where the
+        # rules for choosing it can be stated — a generated field list cannot
+        # say when to reach for one. action_plan especially: its whole
+        # difficulty is deciding where one action ends and the next begins,
+        # and that is not expressible as "steps: list[dict]".
+        and name not in {
+            "out_of_scope", "clarify", "intent_preview", "respond", "action_plan",
+        }
     )
     today = datetime.now(UTC).date()
     today_line = (
@@ -6037,6 +6256,28 @@ grade. If the instructor did not say what the new grade is, leave new_grade
 out and propose anyway — they enter it in the grading form, against the
 submission they are actually looking at. A number you guessed here would be
 a real mark on a real student's record.
+
+RELATIVE GRADES — "add 1 mark", "bump everyone by 5", "take 2 off":
+The instructor DID say what the new grade is; they said it as a change rather
+than a number. Write it as a signed value in new_grade:
+
+  "add 1 mark to everyone who submitted baking 101"   -> "new_grade": "+1"
+  "bump the whole class by 5"                          -> "new_grade": "+5"
+  "deduct 2 marks for late work"                       -> "new_grade": "-2"
+
+The app reads each student's real current score and works out their own
+target, so one signed value covers a class who all sit at different marks.
+This is NOT inventing a grade — the number came from the instructor. Leaving
+new_grade out here throws away the only instruction they gave, and the
+grading form opens with an empty grade box and nothing to approve.
+
+A bare number is still absolute: "give everyone 85" is "85", not "+85".
+Only write a sign when they asked for a change to what is already there.
+
+Feedback does not replace the mark. "Add a mark and pat them on the back" is
+one update_grade carrying BOTH new_grade "+1" and feedback — dropping the
+grade because feedback was also mentioned is the most common way this action
+goes wrong.
 When the user asks to change
 grades or add assignment feedback, propose update_grade immediately with
 whatever details you have instead of asking for missing assignment/student
@@ -6127,6 +6368,95 @@ field of one row ("when is it due?", "did Alice submit?") is not a final read
 Use respond as soon as the results in front of you answer the request, and do
 not re-request something you already have a result for. Stop early with
 clarify only when something is genuinely missing or ambiguous.
+
+ACTION PLANS — when ONE message asks for TWO OR MORE things:
+MULTI-STEP above is one action that needs a lookup first. This is different:
+the instructor asked for several separate things at once. List them:
+
+{"action": "action_plan", "course_name": "<course>",
+ "summary": "<plain English, all of it>",
+ "steps": [ <action>, <action>, ... ]}
+
+Each step is an ordinary action object, written exactly as you would write it
+if that step were the whole request — same fields, same rules, same handoffs.
+There is no combined action and you must never ask for one: no
+"create_assignment_and_send_message", no "grade_and_message". Two things means
+two steps. Steps run in the order you list them, and each gets its own
+preview or form before anything reaches Canvas.
+
+At most 10 steps. That counts what you LIST — the lookups the server runs for
+you inside a step do not count against it.
+
+SPLITTING THE SENTENCE — this is the part that goes wrong:
+Every step gets ONLY its own parameters. A phrase describing the second thing
+is not a field of the first, no matter how close together they sit.
+
+  "send a reminder to students missing testing event 2, and send encouraging
+   feedback to students who scored 70-90 on the python quiz"
+      TWO steps. Different people, different assignments, different channels.
+      One send_message whose subject merges both is WRONG — it puts the quiz
+      feedback in front of students who were only being reminded, and never
+      reaches the students who earned it.
+      steps: [ send_message (audience not_submitted on "testing event 2"),
+               update_grade (audience score_range 70-90 on "python quiz",
+                             feedback = the encouraging text) ]
+
+  "create a midterm review assignment and tell the class about it"
+      TWO steps: create_assignment, then send_message. "tell the class about
+      it" is not a description field on the assignment.
+
+  "add 1 mark to everyone who submitted baking 101 and give feedback patting
+   them on the back"
+      ONE step. Both halves are fields of the SAME update_grade — new_grade
+      "+1" and feedback "..." — for the same students on the same assignment.
+      Splitting this into two update_grade steps would show two cards for one
+      change and risk applying the mark twice.
+
+So: a second phrase is a second STEP when it changes who, what, or which
+channel; it is a FIELD of the current step when it describes the same write
+to the same people. Read the whole sentence before deciding, and never let a
+step silently swallow the instruction meant for the next one.
+
+Order matters where it really matters: create the thing before announcing it,
+resolve a group before writing to it. Otherwise keep the instructor's order.
+
+"THOSE STUDENTS", "THEM", "THE SAME PEOPLE" — pointing at an earlier step:
+You write the whole plan before any of it runs, so you cannot copy a
+recipient_handle out of a result that does not exist yet. Write this instead:
+
+  "recipient_handle": "previous_step"
+
+and the app substitutes the exact group the step before it resolved. Use it
+whenever a step is for the same people as the one before — do NOT re-describe
+the criterion a second time. A group described twice is a group that can come
+back a different size, and the second write then reaches people the first
+never did.
+
+  "create a revision assignment, message everyone who scored under 50 on the
+   midterm, then give those students feedback"
+      steps: [ create_assignment,
+               send_message (audience score_range 0-50 on "the midterm"),
+               update_grade (recipient_handle "previous_step",
+                             feedback = the feedback text) ]
+
+Only for WHO. "previous_step" never names an assignment, a course or a quiz.
+
+"IT", "THAT", "THIS" pointing at a thing rather than at people:
+Repeat the instructor's own words in every step that needs them. Step three
+is dispatched on its own and cannot see what step one said, so
+assignment_reference "it" resolves to nothing.
+
+  "create a quiz on recursion and tell the class about it"
+      the send_message step's body is about the recursion quiz — say so in
+      words; do not write "it".
+
+An assignment you are proposing in this same plan does not exist in Canvas
+yet — it is created when the instructor approves that card. So do not write a
+later step that reads or grades it; a step may only refer to something that
+already exists, or to people resolved by an earlier step.
+
+Do NOT use action_plan for a single action that merely needs a lookup first —
+that is MULTI-STEP above, and one step is not a plan.
 
 CONVERSATION HISTORY:
 Previous messages in this conversation are provided below. If this is
@@ -6910,9 +7240,60 @@ async def handle_chat_message(
     clarify_retries_left = _CLARIFY_RETRY_BUDGET
     result: dict = {}
 
-    for step in range(1, MAX_TURN_STEPS + 1):
+    # The actions an action_plan still owes, in the order the instructor said
+    # them. A queued step is fed into `raw_output` below exactly as if the
+    # model had just written it, so course resolution, _inject_course_into_
+    # envelope, parse_action, the _ensure_*_is_written drafting passes and the
+    # whole dispatch chain run identically whether an action came from a plan
+    # or from a single-action turn. That is the point: "create the assignment,
+    # message the class, then bump the grades" must reuse create_assignment,
+    # send_message and update_grade as they already are, not reach some
+    # combined function written for that particular trio.
+    plan_queue: list[dict] = []
+    # Every step of a plan that produced something the instructor has to see —
+    # a preview card, a form handoff, an answer. Reads are not in here; their
+    # results feed the next step, not the transcript. Empty for a turn that
+    # never ran a plan, and every branch below is written so an empty one
+    # leaves the single-action behaviour byte-for-byte unchanged.
+    plan_results: list[dict] = []
+    # Set once a plan is accepted, and kept true after plan_queue drains, so
+    # the final step still knows it was part of one.
+    plan_active = False
+    # What MAX_TURN_STEPS used to be on its own. Raised only when a plan is
+    # accepted, by exactly that plan's listed length, so a turn that never
+    # runs one stops at the same step it always did.
+    turn_step_budget = MAX_TURN_STEPS
+    # The most recent group any step of this turn resolved, so a later step
+    # saying "those students" gets the exact set rather than a re-derivation.
+    last_resolved_handle: str | None = None
+
+    for step in range(1, MAX_TURN_STEPS + MAX_PLAN_ACTIONS + 1):
         try:
-            if step == 1 and cached_raw_output is not None:
+            if plan_queue:
+                # No LLM call: the model already decided this step when it
+                # wrote the plan. Asking again mid-plan is how a step gets
+                # re-litigated into a different action than the one the
+                # instructor approved the shape of.
+                queued_step = _bind_plan_step_audience(
+                    plan_queue.pop(0), last_resolved_handle
+                )
+                if queued_step is None:
+                    result = {
+                        "action": "clarify",
+                        "clarify": True,
+                        "question": (
+                            "This step was meant for the same students as the "
+                            "one before it, but that group didn't get resolved "
+                            "— so I've stopped rather than guess who it covers. "
+                            "Who should it go to?"
+                        ),
+                        "partial_plan": {},
+                    }
+                    plan_queue.clear()
+                    plan_results.append(result)
+                    break
+                raw_output = _json_dumps(queued_step)
+            elif step == 1 and cached_raw_output is not None:
                 raw_output = cached_raw_output
             else:
                 llm_message = (
@@ -7171,6 +7552,35 @@ async def handle_chat_message(
                         )
                     )
                 )
+            if isinstance(action, ActionPlanAction):
+                # Two or more actions in one sentence. Queue them and let the
+                # loop run each through the ordinary dispatch below — nothing
+                # here executes anything, and no step gains a capability it
+                # would not have had on its own.
+                #
+                # A modify turn is exempt: revising one pending write is a
+                # single edit, and letting a plan replace it would leave the
+                # preview it was supposed to revise still pending.
+                if pending_message_id is not None:
+                    result = {
+                        "action": "respond",
+                        "message": (
+                            "Let's finish the change we're reviewing first — "
+                            "confirm or cancel it, then I can take on the rest."
+                        ),
+                    }
+                    break
+                plan_queue = _prepare_plan_steps(action, course_name_from_llm)
+                plan_active = True
+                # The plan's own steps on top of the ordinary allowance, so a
+                # ten-action request is not silently truncated by a budget
+                # sized for model-driven chaining. Each step still spends its
+                # own resolver work inside one iteration, not several.
+                turn_step_budget = min(
+                    MAX_TURN_STEPS + len(plan_queue),
+                    MAX_TURN_STEPS + MAX_PLAN_ACTIONS,
+                )
+                continue
             if pending_course_switch is not None and conversation.course_id is not None:
                 action = _rebase_action_to_course(action, conversation.course_id)
             # Delivery mode is the model's call, not a keyword search's.
@@ -7416,6 +7826,16 @@ async def handle_chat_message(
                     action.model_dump(),
                     result,
                 )
+
+            # Whatever group this step settled on becomes what "those
+            # students" means for the next one. Updated for reads and writes
+            # alike: the set is just as real when a send_message resolved it
+            # as when a resolver did, and only tracking resolvers would leave
+            # "message everyone under 50, then give those students feedback"
+            # with nothing to point at.
+            step_handle = _handle_from_result(result)
+            if step_handle:
+                last_resolved_handle = step_handle
         except ToolExecutionError as e:
             await log_message(
                 db, conversation, role="assistant", content=redact_secrets(e.log_detail)
@@ -7451,10 +7871,18 @@ async def handle_chat_message(
         # going back for information, where two attempts is the difference
         # between "try the obvious tool" and a loop that spends fifteen steps
         # asking itself the same question.
+        #
+        # Not while a plan still has steps queued: this retry works by going
+        # back to the model, and the loop does not call the model while there
+        # is a queue to drain. Continuing here would silently run the NEXT
+        # planned action as though it were the retry, which is both not what
+        # the instructor asked for and a write attributed to a step that never
+        # ran. A plan's clarify reaches the instructor instead (see below).
         if (
             result.get("clarify")
             and result.get("clarify_candidates")
             and pending_message_id is None
+            and not plan_queue
             and clarify_retries_left > 0
         ):
             clarify_retries_left -= 1
@@ -7462,7 +7890,7 @@ async def handle_chat_message(
                 {"action": action.action, "result": result,
                  "signature": _step_signature(action)}
             )
-            if step >= MAX_TURN_STEPS:
+            if step >= turn_step_budget:
                 result = _step_budget_exhausted_response(loop_steps)
                 break
             continue
@@ -7489,6 +7917,38 @@ async def handle_chat_message(
         # table rather than a sentence about it (see ReadAction.final). The
         # default is the chaining one, so forgetting the flag costs a call and
         # gives prose — never a raw dump in place of an answer.
+        if plan_active:
+            # A plan step ends the turn only when it has to. A write does not:
+            # "message the class and bump the grades" is two writes, and the
+            # loop breaking after the first is precisely the bug — the second
+            # half of the request was parsed, understood, and then dropped
+            # without a word.
+            if _plan_step_is_surfaced(action, result, is_last=not plan_queue):
+                plan_results.append(result)
+            if result.get("clarify") or result.get("error"):
+                # Stop and ask rather than pressing on. The remaining steps
+                # were written against an assumption this one just disproved,
+                # and running them anyway means writing to Canvas on the
+                # strength of a question nobody answered.
+                plan_queue.clear()
+                break
+            loop_steps.append(
+                {"action": action.action, "result": result,
+                 "signature": _step_signature(action)}
+            )
+            if plan_queue:
+                if step >= turn_step_budget:
+                    result = _step_budget_exhausted_response(loop_steps)
+                    # Appended, not just assigned: the promotion below hands
+                    # the turn back to plan_results[0], so a budget message
+                    # left only in `result` would be overwritten and the
+                    # instructor would never learn the plan was cut short.
+                    plan_results.append(result)
+                    plan_queue.clear()
+                    break
+                continue
+            break
+
         is_chainable_step = (
             pending_message_id is None
             and action.action in READ_ACTIONS
@@ -7501,9 +7961,19 @@ async def handle_chat_message(
             {"action": action.action, "result": result,
              "signature": _step_signature(action)}
         )
-        if step >= MAX_TURN_STEPS:
+        if step >= turn_step_budget:
             result = _step_budget_exhausted_response(loop_steps)
             break
+
+    # A plan's steps each produced a result; the loop left `result` holding
+    # the last one. Promote the FIRST instead, so the turn reads in the order
+    # the instructor said it — the primary result drives grounding,
+    # persistence and the workflow row exactly as a single-action turn's does,
+    # and the remainder become their own cards below.
+    plan_extra_results: list[dict] = []
+    if plan_results:
+        result = plan_results[0]
+        plan_extra_results = plan_results[1:]
 
     # Grade resolver clarifications are the only path allowed to retain grade
     # values across turns. Generic LLM clarify payloads stay memory-safe.
@@ -7686,11 +8156,14 @@ async def handle_chat_message(
     # Only persist extras when the primary result is an intent_preview;
     # otherwise log and discard so a clarify/error path cannot silently
     # drop (or incorrectly keep) orphaned group payloads.
+    additional_previews: list[dict] = []
     extra_groups = result.pop("_extra_groups", None)
     if extra_groups:
         if result.get("intent_preview"):
-            result["additional_previews"] = await _persist_additional_message_previews(
-                db, conversation, extra_groups,
+            additional_previews.extend(
+                await _persist_additional_message_previews(
+                    db, conversation, extra_groups,
+                )
             )
         else:
             logger.error(
@@ -7699,6 +8172,23 @@ async def handle_chat_message(
                 len(extra_groups),
                 result.get("action"),
             )
+
+    # Every plan step after the first, in order. These ride the same
+    # additional_previews channel the grouped send_message already used, so
+    # the client needs one way to render "more than one thing happened this
+    # turn" rather than a second one that means almost the same.
+    if plan_extra_results:
+        additional_previews.extend(
+            await _persist_additional_plan_results(
+                db, conversation, user,
+                source_user_message_id=user_msg.id,
+                user_prompt=message,
+                results=plan_extra_results,
+            )
+        )
+
+    if additional_previews:
+        result["additional_previews"] = additional_previews
 
     # Persist the chat turn first so a deferred-status update failure cannot
     # roll back an already-generated assistant reply.

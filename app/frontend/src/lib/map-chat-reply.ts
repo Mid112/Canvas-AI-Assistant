@@ -967,11 +967,42 @@ export function mapChatReplyToAssistantResponse(
   const mapped = mapReplyBody(reply, isError, conversationId, timeZone);
   const unverifiedClaims = readUnverifiedClaims(reply);
   const resolvedCourse = readResolvedCourse(reply);
+  // Read here rather than inside any one branch of mapReplyBody. It used to
+  // be computed under `if (reply.intent_preview)`, which was true while a
+  // grouped send_message was the only thing that produced extras. An action
+  // plan produces them for any shape — "message them, then bump the grades"
+  // ends on a grade handoff, which is a plain respond — and under the old
+  // placement every card after the first was parsed by the backend, persisted,
+  // returned, and then silently dropped by the client.
+  const additionalPreviews = readAdditionalPreviews(reply, conversationId);
   return {
     ...mapped,
+    ...(additionalPreviews ? { additionalPreviews } : {}),
     ...(unverifiedClaims ? { unverifiedClaims } : {}),
     ...(resolvedCourse ? { resolvedCourse } : {}),
   };
+}
+
+/** Every extra card this one turn produced, each shaped like a whole reply.
+ *
+ * Entries are mapped by the same reader as the primary, so a plan step renders
+ * exactly as it would have on a turn of its own. The backend flattens before
+ * sending, so an entry never carries extras of its own and this never
+ * recurses more than one level. */
+function readAdditionalPreviews(
+  reply: Record<string, unknown>,
+  conversationId?: number,
+): AssistantResponse[] | undefined {
+  if (!Array.isArray(reply.additional_previews)) {
+    return undefined;
+  }
+  const entries = reply.additional_previews as Record<string, unknown>[];
+  if (entries.length === 0) {
+    return undefined;
+  }
+  return entries.map((entry) =>
+    mapChatReplyToAssistantResponse(entry, false, conversationId),
+  );
 }
 
 /** The course the backend settled on for this turn.
@@ -1047,21 +1078,13 @@ function mapReplyBody(
         ? reply.pending_message_id
         : undefined;
 
-    // A grouped send_message turn can resolve to more than one distinct
-    // message (see additional_previews in chat.py's
-    // _persist_additional_message_previews) — each entry is shaped
-    // identically to this same reply, so it maps the same way.
-    //
-    // Read before the per-action branches because send_message is the only
-    // action that produces these, and its branch returns early: computing
-    // them further down meant they were parsed for every action that never
-    // has any, and dropped for the one that does.
-    const additionalPreviewsRaw = Array.isArray(reply.additional_previews)
-      ? (reply.additional_previews as Record<string, unknown>[])
-      : undefined;
-    const additionalPreviews = additionalPreviewsRaw?.map((entry) =>
-      mapChatReplyToAssistantResponse(entry, false, conversationId),
-    );
+    // Whether this turn produced more than one card. The entries themselves
+    // are mapped once, at the single exit point in
+    // mapChatReplyToAssistantResponse — only the count is needed here, to
+    // decide whether there is a single destination worth naming.
+    const extraCardCount = Array.isArray(reply.additional_previews)
+      ? reply.additional_previews.length
+      : 0;
 
     // Quiz creation redirects to the dedicated form on live turns, and also
     // keeps an "Open quiz creation form" button so reopening chat history
@@ -1104,7 +1127,7 @@ function mapReplyBody(
     // open one of the drafts and the others would be left with nothing
     // pointing at them, so each row keeps its own button instead.
     if (proposed?.action === "send_message") {
-      const isGrouped = (additionalPreviews?.length ?? 0) > 0;
+      const isGrouped = extraCardCount > 0;
       return {
         content:
           readString(reply.summary) ??
@@ -1113,7 +1136,7 @@ function mapReplyBody(
           "Messages are drafted and sent in the Messages tab so the write is reviewed once and recorded in workflow history.",
         autoNavigate: false,
         ...(isGrouped
-          ? { additionalPreviews }
+          ? {}
           : {
               navigateTo: {
                 path: instructorMessagesPath({ tab: "compose" }),
@@ -1158,7 +1181,6 @@ function mapReplyBody(
         timeZone,
       ),
       pendingMessageId,
-      additionalPreviews,
     };
   }
 

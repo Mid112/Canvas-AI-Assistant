@@ -1,5 +1,5 @@
 import { CheckCircle2, History, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
@@ -156,6 +156,18 @@ export function InstructorCourseGradesPage() {
   const [submissions, setSubmissions] = useState<ApiSubmission[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [postedGrade, setPostedGrade] = useState("");
+  // Per-student targets, for a relative request where each student lands on a
+  // different number ("add 1 mark to everyone who submitted"). One shared
+  // grade box cannot express that, and it is not an edge case — a relative
+  // adjustment is the most natural way to ask for a curve or a late penalty.
+  //
+  // These were previously parsed off the URL and then used only to derive the
+  // selection, so the numbers themselves were dropped: the box came up empty,
+  // any feedback in the same request pasted fine, and the grades did not move.
+  // That is the whole reported bug.
+  const [studentGrades, setStudentGrades] = useState<Map<number, string>>(
+    () => new Map(),
+  );
   const [feedback, setFeedback] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [studentFilter, setStudentFilter] = useState("");
@@ -282,6 +294,23 @@ export function InstructorCourseGradesPage() {
                 .filter((item) => !isUnsubmitted(item))
                 .map((item) => item.user_id),
           );
+          // Seeded here rather than alongside the grade box above, because a
+          // target is only meaningful against a student who is really on this
+          // assignment — the same reason the selection is filtered.
+          const targets = new Map(
+            [...prefill.studentGrades].filter(([id]) =>
+              items.some((item) => item.user_id === id),
+            ),
+          );
+          setStudentGrades(targets);
+          // When every target is the same number there is nothing per-student
+          // about it, so it belongs in the shared box where the instructor can
+          // see and edit one value instead of a column of identical ones.
+          const distinct = new Set(targets.values());
+          if (distinct.size === 1) {
+            setPostedGrade([...distinct][0]);
+            setStudentGrades(new Map());
+          }
           setPreviews([]);
           setNotice(null);
           setError(null);
@@ -300,7 +329,14 @@ export function InstructorCourseGradesPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, assignmentId, canvasUrl, parsedLocalCourseId, prefill.studentIds]);
+  }, [
+    accessToken,
+    assignmentId,
+    canvasUrl,
+    parsedLocalCourseId,
+    prefill.studentIds,
+    prefill.studentGrades,
+  ]);
 
   const selectedSubmissions = useMemo(
     () => submissions.filter((item) => selectedUserIds.includes(item.user_id)),
@@ -343,17 +379,54 @@ export function InstructorCourseGradesPage() {
   const selectedUnsubmittedCount = selectedSubmissions.filter(
     (submission) => isUnsubmitted(submission),
   ).length;
+  // The grade one student is getting. A per-student target wins over the
+  // shared box, so a relative adjustment lands each student on their own
+  // number; everyone without one falls back to the box, which is what a
+  // manual visit and a uniform request both use.
+  const gradeForStudent = useCallback(
+    (userId: number) => studentGrades.get(userId) ?? postedGrade,
+    [studentGrades, postedGrade],
+  );
+
+  const hasPerStudentGrades = studentGrades.size > 0;
   const numericPostedGrade = Number(postedGrade);
-  const hasGradeChange = postedGrade.trim().length > 0;
-  const gradeValidationError = getGradeValidationError(postedGrade);
+  const hasGradeChange =
+    postedGrade.trim().length > 0 ||
+    [...studentGrades.values()].some((value) => value.trim().length > 0);
+  // Every value that will actually be sent, not just the one in the box —
+  // validating only the box would let a malformed per-student target through
+  // the client checks and fail at the API instead, halfway through a batch.
+  const gradeValidationError = useMemo(() => {
+    const values = new Set(
+      selectedSubmissions.map((submission) => gradeForStudent(submission.user_id)),
+    );
+    if (values.size === 0) {
+      values.add(postedGrade);
+    }
+    for (const value of values) {
+      const problem = getGradeValidationError(value);
+      if (problem) {
+        return problem;
+      }
+    }
+    return null;
+  }, [selectedSubmissions, gradeForStudent, postedGrade]);
   const hasFeedback = feedback.trim().length > 0;
   const isFeedbackOnly = !hasGradeChange && hasFeedback;
   const feedbackHasProfanity = containsProfanity(feedback);
   const exceedsPointsPossible =
     hasGradeChange &&
-    Number.isFinite(numericPostedGrade) &&
     typeof selectedAssignment?.points_possible === "number" &&
-    numericPostedGrade > selectedAssignment.points_possible;
+    (hasPerStudentGrades
+      ? selectedSubmissions.some((submission) => {
+        const value = Number(gradeForStudent(submission.user_id));
+        return (
+          Number.isFinite(value) &&
+          value > (selectedAssignment.points_possible as number)
+        );
+      })
+      : Number.isFinite(numericPostedGrade) &&
+        numericPostedGrade > selectedAssignment.points_possible);
 
   const payloads = useMemo(
     () =>
@@ -361,7 +434,7 @@ export function InstructorCourseGradesPage() {
         ? selectedSubmissions.map((submission) => ({
           assignment_id: assignmentId,
           user_id: submission.user_id,
-          posted_grade: postedGrade,
+          posted_grade: gradeForStudent(submission.user_id),
           feedback: feedback || null,
           // Reuse the row the page already fetched from Canvas so preview
           // can render the before/after diff without another submissions read.
@@ -371,7 +444,7 @@ export function InstructorCourseGradesPage() {
           },
         }))
         : [],
-    [assignmentId, postedGrade, feedback, selectedAssignment?.points_possible, selectedSubmissions],
+    [assignmentId, gradeForStudent, feedback, selectedAssignment?.points_possible, selectedSubmissions],
   );
 
   const allDisplayedSelected =
@@ -484,6 +557,9 @@ export function InstructorCourseGradesPage() {
         // panel can reclassify the empty grade draft as feedback-only.
         setPostedGrade("");
         setFeedback("");
+        // Cleared with the box, for the same reason: targets that survived a
+        // successful write would silently re-apply to the next selection.
+        setStudentGrades(new Map());
       }
       if (assignmentId) {
         const refreshedSubmissions = await fetchAssignmentSubmissions(
@@ -579,13 +655,28 @@ export function InstructorCourseGradesPage() {
                   value={postedGrade}
                   onChange={(event) => {
                     setPostedGrade(event.target.value);
+                    // Typing one grade for everybody replaces the per-student
+                    // targets outright. Keeping them would make this box look
+                    // inert — the instructor types 90, submits, and the
+                    // students who had their own target still get it.
+                    setStudentGrades(new Map());
                     setPreviews([]);
                   }}
-                  placeholder="92, A-, or complete/incomplete"
+                  placeholder={
+                    hasPerStudentGrades
+                      ? "Per-student grades below — type here to use one for all"
+                      : "92, A-, or complete/incomplete"
+                  }
                 />
                 {gradeValidationError && (
                   <p className="text-xs font-medium text-destructive">
                     {gradeValidationError}
+                  </p>
+                )}
+                {hasPerStudentGrades && (
+                  <p className="text-xs text-muted-foreground">
+                    Each selected student has their own target, shown in the
+                    New column. Preview to check them before submitting.
                   </p>
                 )}
               </div>
@@ -686,7 +777,15 @@ export function InstructorCourseGradesPage() {
                             preview && "bg-amber-50 text-amber-900",
                           )}
                         >
-                          {preview?.proposed.posted_grade ?? "-"}
+                          {/* Before preview, show this student's own target
+                              when they have one. A relative adjustment is
+                              otherwise invisible until preview runs, and an
+                              instructor cannot approve what they cannot see —
+                              which mark each student lands on IS the change. */}
+                          {preview?.proposed.posted_grade ??
+                            (selectedUserIds.includes(submission.user_id)
+                              ? studentGrades.get(submission.user_id) ?? "-"
+                              : "-")}
                         </TableCell>
                         <TableCell>
                           <input
