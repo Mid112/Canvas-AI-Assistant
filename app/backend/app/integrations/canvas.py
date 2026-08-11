@@ -652,7 +652,9 @@ async def fetch_student_enrollment(
                 params={
                     "type[]": "StudentEnrollment",
                     "state[]": "active",
-                    "user_id[]": canvas_user_id,
+                    # Scalar user_id — canvas-docker 404s on user_id[] for this
+                    # endpoint even when the course and student both exist.
+                    "user_id": canvas_user_id,
                     "include[]": "user",
                     "per_page": 10,
                 },

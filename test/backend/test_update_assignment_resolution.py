@@ -1,5 +1,3 @@
-from canvas_test_utils import unique_canvas_token
-
 """Tests for update_assignment's assignment_reference resolution (see
 _run_update_assignment_chain in app/backend/app/services/chat.py) —
 mirrors fetch_submissions/resolve_missing_submissions' "resolve
@@ -14,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.schemas.canvas import AssignmentResponse
+from canvas_test_utils import unique_canvas_token
 
 CANVAS_URL = "https://canvas.example.edu"
 
@@ -33,12 +32,20 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        client.patch(
+    canvas_token = f"{unique_canvas_token()}-{uuid.uuid4().hex}"
+    with (
+        patch("app.services.auth.validate_token", new_callable=AsyncMock),
+        patch(
+            "app.services.auth.fetch_canvas_time_zone",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        connected = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
+            json={"canvas_token": canvas_token, "canvas_url": CANVAS_URL},
             headers=headers,
         )
+    assert connected.status_code == 200, connected.text
 
     canvas_course_id = uuid.uuid4().int % 10_000_000
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
@@ -50,6 +57,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
             "workflow_state": "available",
         }]
         resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+        assert resp.status_code == 200, resp.text
         local_course_id = resp.json()[0]["local_id"]
         active_resp = client.patch(
             "/api/v1/canvas/active-course",

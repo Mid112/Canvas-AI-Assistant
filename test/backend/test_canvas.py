@@ -97,7 +97,10 @@ def auth_headers(client, canvas_token):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         connected = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
+            # Module-scoped fixture must use the stable canvas_token fixture,
+            # not unique_canvas_token() — that helper keys off PYTEST_CURRENT_TEST
+            # and changes between the fixture setup test and later assertions.
+            json={"canvas_token": canvas_token, "canvas_url": CANVAS_URL},
             headers=headers,
         )
     assert connected.status_code == 200, connected.text
@@ -602,8 +605,7 @@ def test_list_cached_courses_excludes_deleted_course(client):
 # Verifies: List assignments.
 def test_list_assignments(client):
     """Assignments endpoint uses local course ID — seed a course first to get one."""
-    canvas_token = f"test-token-{uuid.uuid4()}"
-    headers = _register_with_canvas(client, canvas_token)
+    headers = _register_with_canvas(client)
     courses = [_unique_course()]
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
         mock.return_value = courses
@@ -616,7 +618,7 @@ def test_list_assignments(client):
         response = client.get(f"/api/v1/canvas/courses/{local_id}/assignments", headers=headers)
     assert response.status_code == 200
     assert response.json()[0]["name"] == "Assignment 1"
-    # token is unique_canvas_token() (set in _register_with_canvas); canvas_course_id is dynamic
+    # The helper derives a stable per-test token; canvas_course_id is dynamic.
     mock.assert_awaited_once_with(canvas_course_id, unique_canvas_token(), CANVAS_URL)
 
 
@@ -693,7 +695,7 @@ def test_get_assignment(client, auth_headers, canvas_token):
 
     assert response.status_code == 200
     assert response.json()["name"] == "Assignment 1"
-    mock.assert_awaited_once_with(12345, 10, unique_canvas_token(), CANVAS_URL)
+    mock.assert_awaited_once_with(12345, 10, canvas_token, CANVAS_URL)
 
 
 # Verifies: Create assignment.
@@ -791,7 +793,7 @@ def test_update_assignment(client, auth_headers, canvas_token):
         12345,
         10,
         payload | {"points_possible": MOCK_ASSIGNMENT["points_possible"]},
-        unique_canvas_token(),
+        canvas_token,
         CANVAS_URL,
     )
 

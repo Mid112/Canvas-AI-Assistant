@@ -41,6 +41,7 @@ async def test_update_canvas_token_stores_canvas_time_zone():
     # URL so the mock can't drift back off the endpoint that has the field.
     with (
         patch("app.services.auth.validate_token", new=AsyncMock()),
+        patch("app.services.auth.token_is_already_used", new=AsyncMock(return_value=False)),
         patch(
             "app.services.canvas_timezone.fetch_self_profile",
             new=AsyncMock(return_value={"time_zone": "America/Vancouver"}),
@@ -76,6 +77,7 @@ async def test_update_canvas_token_survives_an_unreachable_profile_endpoint():
 
     with (
         patch("app.services.auth.validate_token", new=AsyncMock()),
+        patch("app.services.auth.token_is_already_used", new=AsyncMock(return_value=False)),
         patch(
             "app.services.canvas_timezone.fetch_self_profile",
             new=AsyncMock(
@@ -107,6 +109,7 @@ async def test_update_canvas_token_ignores_a_non_string_time_zone():
 
     with (
         patch("app.services.auth.validate_token", new=AsyncMock()),
+        patch("app.services.auth.token_is_already_used", new=AsyncMock(return_value=False)),
         patch(
             "app.services.canvas_timezone.fetch_self_profile",
             new=AsyncMock(return_value={"time_zone": None}),

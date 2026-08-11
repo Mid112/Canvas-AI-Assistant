@@ -1,5 +1,3 @@
-from canvas_test_utils import unique_canvas_token
-
 """Tests for direct-execute reads and fetch_submissions' chained
 assignment resolution (see READ_ACTIONS / _run_tracked_read /
 _run_fetch_submissions_chain in app/backend/app/services/chat.py)."""
@@ -12,6 +10,7 @@ from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
 from app.main import app
+from canvas_test_utils import unique_canvas_token
 
 CANVAS_URL = "https://canvas.example.edu"
 
@@ -313,6 +312,9 @@ def test_fetch_submissions_unresolvable_reference_returns_clarify(client):
     ]
 
     with patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=assignments_payload)):
+        # Candidate-based clarifications get two bounded retries before the
+        # assistant asks the instructor, so each pass needs a planner reply
+        # followed by an unresolved assignment-resolver reply.
         body = _chat(
             client, headers, "show me submissions for that one assignment",
             [

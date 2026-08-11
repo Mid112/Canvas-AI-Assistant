@@ -89,13 +89,8 @@ describe("ConfirmationDialog", () => {
       />,
     );
 
-    // "announcement" now sits in its own <strong> so it can be emphasised,
-    // which splits the sentence across nodes — assert against the emphasised
-    // word and the sentence that carries it.
-    const mode = screen.getByText("announcement");
-    expect(mode.parentElement?.textContent).toMatch(
-      /whole course as an\s*announcement/i,
-    );
+    expect(screen.getByText("ANNOUNCEMENT")).toBeInTheDocument();
+    expect(screen.getByText(/whole course as an announcement/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Confirm Send" }));
     expect(onConfirm).toHaveBeenCalledOnce();
   });
@@ -164,6 +159,7 @@ describe("ConfirmationDialog", () => {
         subject="Subject"
         body="Body"
         isSending={false}
+        deliveryMode="private_message"
         onConfirm={vi.fn()}
       />,
     );
@@ -189,15 +185,13 @@ describe("ConfirmationDialog", () => {
         subject="Subject"
         body="Body"
         isSending={false}
+        deliveryMode="announcement"
         onConfirm={vi.fn()}
       />,
     );
 
-    const mode = screen.getByText("announcement");
+    const mode = screen.getByText("ANNOUNCEMENT");
     expect(mode.tagName).toBe("STRONG");
-    expect(mode.className).toContain("uppercase");
-    expect(mode.className).toContain("font-bold");
-    expect(mode.className).toContain("text-base");
   });
 
   it("emphasises PRIVATE MESSAGE when recipients are selected", () => {
@@ -212,12 +206,11 @@ describe("ConfirmationDialog", () => {
         subject="Subject"
         body="Body"
         isSending={false}
+        deliveryMode="private_message"
         onConfirm={vi.fn()}
       />,
     );
 
-    const mode = screen.getByText("private message");
-    expect(mode.tagName).toBe("STRONG");
-    expect(mode.className).toContain("uppercase");
+    expect(screen.getByText("PRIVATE MESSAGE")).toBeInTheDocument();
   });
 });
