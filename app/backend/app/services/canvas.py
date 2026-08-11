@@ -1479,6 +1479,17 @@ async def delete_course_quiz(
         await delete_quiz(int(course.canvas_course_id), quiz_id, token, canvas_url)
 
 
+# Canvas never answered. Anything Canvas itself said -- 404, 401, 403, 422 --
+# is an answer and is never in here.
+_UNREACHABLE = frozenset(
+    {
+        status.HTTP_502_BAD_GATEWAY,
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        status.HTTP_504_GATEWAY_TIMEOUT,
+    }
+)
+
+
 async def update_course_assignment(
     local_course_id: int,
     assignment_id: int,
@@ -1528,19 +1539,40 @@ async def update_course_assignment(
     elif due_at is not None:
         due_at = due_at.astimezone(UTC)
 
-    # Fetched unconditionally, not only to fill in absent points: the
-    # idempotency key below has to describe the transition, not the
-    # destination. Holding only the destination, a rename to "cherry mango
-    # pie", back to "banana bread", then to "cherry mango pie" again collapses
-    # onto a single key, and the third write replays the cached response
-    # instead of calling Canvas — the app reports success while Canvas still
-    # holds the old title. The same defect stopped grade 18→19→16→19 at 16.
-    current = await get_assignment(
-        course.id, assignment_id, user, resolved_canvas_url, db
-    )
+    # Read before writing, not only to fill in absent points: the idempotency
+    # key below has to describe the transition, not the destination. Holding
+    # only the destination, a rename to "cherry mango pie", back to "banana
+    # bread", then to "cherry mango pie" again collapses onto a single key, and
+    # the third write replays the cached response instead of calling Canvas —
+    # the app reports success while Canvas still holds the old title. The same
+    # defect stopped grade 18→19→16→19 at 16.
+    #
+    # An answer from Canvas is always honoured, including a refusal: 404 means
+    # the assignment is gone and there is nothing to overwrite, 401/403 mean
+    # this token may not touch it. Those must fail the update, and making the
+    # read unconditional is what finally enforces the existence check on this
+    # path.
+    #
+    # Not reaching Canvas at all is a different thing, and says nothing about
+    # the assignment. It is only fatal when points_possible is absent, since the
+    # Canvas PUT is a full overwrite and None would wipe the score. With every
+    # field supplied there is nothing left to learn from the read, so a bad
+    # gateway must not turn a viable update into a 502 the instructor cannot act
+    # on — before this fetch became unconditional, that update made no read at
+    # all and could not fail this way.
+    try:
+        current = await get_assignment(
+            course.id, assignment_id, user, resolved_canvas_url, db
+        )
+    except HTTPException as exc:
+        if payload.points_possible is None or exc.status_code not in _UNREACHABLE:
+            raise
+        current = None
 
     points_possible = payload.points_possible
     if points_possible is None:
+        # current is never None here: the read above re-raises when points are
+        # absent, precisely because this line needs it.
         points_possible = current.points_possible
 
     merged = AssignmentUpdate(
@@ -1550,15 +1582,27 @@ async def update_course_assignment(
         points_possible=points_possible,
     )
 
+    # The state being written over, or a marker standing in for it. The marker
+    # keeps a degraded key from colliding with a real transition; two updates to
+    # the same destination that both failed to read first can still collapse,
+    # which is the narrow price of not failing the write outright.
+    prior_state: tuple[object, ...] = (
+        (
+            current.name,
+            current.description,
+            current.due_at.isoformat() if current.due_at else None,
+            current.points_possible,
+        )
+        if current is not None
+        else ("prior-state-unavailable",)
+    )
+
     key = idempotency_key or build_idempotency_key(
         "update_assignment",
         user.id,
         course.id,
         assignment_id,
-        current.name,
-        current.description,
-        current.due_at.isoformat() if current.due_at else None,
-        current.points_possible,
+        *prior_state,
         merged.model_dump(mode="json"),
     )
 

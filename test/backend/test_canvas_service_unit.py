@@ -1,4 +1,5 @@
 """Direct unit tests for services/canvas.py."""
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -774,6 +775,95 @@ async def test_update_course_assignment_calls_integration():
 
     assert result.name == "Updated"
     assert mock_update.await_args.args[2]["points_possible"] == 50.0
+
+
+@contextmanager
+def _update_assignment_patched(read: AsyncMock, write: AsyncMock):
+    """Every Canvas call update_course_assignment makes, stubbed.
+
+    Deliberately covering the read as well as the write. Patching only the write
+    and letting the read reach the network is how test_canvas_write_failures
+    ended up asserting on whichever call failed first rather than on the one it
+    names -- one of its cases passed only because an unstubbed read returned the
+    same status the stubbed write was supposed to.
+    """
+    course = SimpleNamespace(
+        id=1, canvas_course_id="100", canvas_url="https://canvas.example.edu", workflow_state="available",
+    )
+    with (
+        patch(
+            "app.services.assignment_validation.get_owned_course_or_404",
+            new=AsyncMock(return_value=course),
+        ),
+        patch("app.services.canvas.get_owned_course", new=AsyncMock(return_value=course)),
+        patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
+        patch("app.services.canvas.get_assignment", new=read),
+        patch("app.services.canvas.update_assignment", new=write),
+    ):
+        yield SimpleNamespace(
+            db=AsyncMock(),
+            user=SimpleNamespace(
+                id=1, canvas_connections=[_connection("https://canvas.example.edu")]
+            ),
+        )
+
+
+# The pre-write read exists to key the write on the transition rather than the
+# destination, so it now runs on every update instead of only when points are
+# missing. That made it a new way for a healthy update to fail, and these three
+# pin where the line sits: an answer from Canvas is honoured, silence is not.
+
+@pytest.mark.asyncio
+async def test_update_survives_a_canvas_that_cannot_be_reached_when_nothing_is_missing():
+    """502/503/504 mean Canvas never answered, which says nothing about the
+    assignment. With every field supplied the read had nothing left to teach
+    us, so refusing the write here would fail an update that was fine."""
+    read = AsyncMock(side_effect=HTTPException(status_code=502, detail="Could not reach Canvas"))
+    write = AsyncMock(return_value={"id": 30, "name": "Updated", "course_id": 100})
+
+    with _update_assignment_patched(read, write) as ctx:
+        result = await update_course_assignment(
+            1, 30, AssignmentUpdate(name="Updated", points_possible=75), ctx.user,
+            "https://canvas.example.edu", ctx.db,
+        )
+
+    assert result.name == "Updated"
+    write.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_update_refuses_when_canvas_says_the_assignment_is_gone():
+    """404 is an answer, not silence. There is nothing to overwrite, and this
+    is the existence check the update path was missing."""
+    read = AsyncMock(side_effect=HTTPException(status_code=404, detail="Assignment not found"))
+    write = AsyncMock()
+
+    with _update_assignment_patched(read, write) as ctx, pytest.raises(HTTPException) as exc:
+        await update_course_assignment(
+            1, 30, AssignmentUpdate(name="Updated", points_possible=75), ctx.user,
+            "https://canvas.example.edu", ctx.db,
+        )
+
+    assert exc.value.status_code == 404
+    write.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_refuses_an_unreachable_canvas_when_points_are_absent():
+    """The Canvas PUT is a full overwrite, so an absent points_possible has to
+    be filled from the live assignment. Writing without it wipes the score --
+    worse than failing."""
+    read = AsyncMock(side_effect=HTTPException(status_code=504, detail="Canvas timed out"))
+    write = AsyncMock()
+
+    with _update_assignment_patched(read, write) as ctx, pytest.raises(HTTPException) as exc:
+        await update_course_assignment(
+            1, 30, AssignmentUpdate(name="Updated"), ctx.user,
+            "https://canvas.example.edu", ctx.db,
+        )
+
+    assert exc.value.status_code == 504
+    write.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
