@@ -114,7 +114,7 @@ def test_fetch_submissions_includes_assignment_context_and_grouping(client):
 
     llm_outputs = [
         '{"action": "fetch_submissions", "course_name": "CPSC 310", '
-        '"assignment_reference": "the latest assignment"}',
+        '"assignment_reference": "the latest assignment", "final": true}',
         '{"assignment_id": 222}',
     ]
 
@@ -155,7 +155,7 @@ def test_fetch_submissions_summary_when_nobody_pending(client):
 
     llm_outputs = [
         '{"action": "fetch_submissions", "course_name": "CPSC 310", '
-        '"assignment_reference": "the latest assignment"}',
+        '"assignment_reference": "the latest assignment", "final": true}',
         '{"assignment_id": 222}',
     ]
 
@@ -194,7 +194,7 @@ def test_fetch_submissions_with_known_id_still_gets_assignment_context(client):
     with patch("app.mcp_tools.dispatcher.get_submissions", new=AsyncMock(return_value=submissions)):
         second = _chat(
             client, headers, "show submissions for assignment 222",
-            '{"action": "fetch_submissions", "course_name": "CPSC 310", "assignment_id": 222}',
+            '{"action": "fetch_submissions", "course_name": "CPSC 310", "assignment_id": 222, "final": true}',
             conversation_id=conversation_id,
         )
 

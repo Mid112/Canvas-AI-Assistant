@@ -180,6 +180,12 @@ def normalize_semantic_intent(
         if intent.criteria:
             return _unsupported_criteria(intent)
         result: dict[str, Any] = {"action": action_name}
+        # Carried across the semantic boundary like any other read field: the
+        # semantic path is the one the prompt steers the model down, so a
+        # `final` that cannot cross it would mean "show me my assignments"
+        # always costs a second call and always answers in prose.
+        if intent.final:
+            result["final"] = True
         if local_course_id is not None:
             result["local_course_id"] = local_course_id
 

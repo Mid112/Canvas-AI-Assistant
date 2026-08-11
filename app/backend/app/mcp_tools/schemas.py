@@ -60,16 +60,39 @@ def normalize_score_basis(value: object) -> object:
     return _BASIS_SYNONYMS.get(cleaned, cleaned)
 
 
-class FetchCoursesAction(BaseModel):
+class ReadAction(BaseModel):
+    """Shared by every read-only action: how it ends the turn, or doesn't.
+
+    A read is a step toward an answer by default — the server runs it and
+    comes back to the model with the result, so "what is the due date of
+    homework 1?" can fetch the assignments and then reply with the one date
+    instead of rendering all twenty-seven.
+
+    ``final`` is the model saying "the payload I am asking for IS the answer":
+    render it and stop. That is the right call for "show me the submissions
+    for lab 4", where a table is a better answer than any sentence about it,
+    and the wrong call for a question about one field of one row.
+
+    The default is deliberately the chaining one. Forgetting to set ``final``
+    costs one extra model call and gives a prose answer where a table would
+    have been nicer — annoying, never wrong. Defaulting the other way means
+    every question the model does not recognise as multi-step silently
+    terminates on raw data, which is the bug this replaced.
+    """
+
+    final: bool = False
+
+
+class FetchCoursesAction(ReadAction):
     action: Literal["fetch_courses"] = "fetch_courses"
 
 
-class FetchAssignmentsAction(BaseModel):
+class FetchAssignmentsAction(ReadAction):
     action: Literal["fetch_assignments"] = "fetch_assignments"
     local_course_id: int
 
 
-class FetchSubmissionsAction(BaseModel):
+class FetchSubmissionsAction(ReadAction):
     action: Literal["fetch_submissions"] = "fetch_submissions"
     local_course_id: int
     # Both optional: the LLM should supply assignment_id directly only when
@@ -88,12 +111,12 @@ class FetchSubmissionsAction(BaseModel):
     assignment_reference: str | None = None
 
 
-class FetchStudentsAction(BaseModel):
+class FetchStudentsAction(ReadAction):
     action: Literal["fetch_students"] = "fetch_students"
     local_course_id: int
 
 
-class ResolveMissingSubmissionsAction(BaseModel):
+class ResolveMissingSubmissionsAction(ReadAction):
     action: Literal["resolve_missing_submissions"] = "resolve_missing_submissions"
     local_course_id: int
     # Same convention as FetchSubmissionsAction: pass assignment_id directly
@@ -121,7 +144,7 @@ class ResolveMissingSubmissionsAction(BaseModel):
         return normalize_status_filters(value)
 
 
-class ResolveScoreRangeAction(BaseModel):
+class ResolveScoreRangeAction(ReadAction):
     """Students whose score on one assignment falls in a band.
 
     Separate from ResolveMissingSubmissionsAction rather than another
@@ -157,7 +180,7 @@ class ResolveScoreRangeAction(BaseModel):
         return normalize_score_basis(value)
 
 
-class AnalyzeCourseSubmissionsAction(BaseModel):
+class AnalyzeCourseSubmissionsAction(ReadAction):
     """Course-wide submission overview, across every assignment at once.
 
     Deliberately separate from ResolveMissingSubmissionsAction rather than
@@ -180,7 +203,7 @@ class AnalyzeCourseSubmissionsAction(BaseModel):
         return normalize_status_filters(value)
 
 
-class FindAssignmentsBySubmissionStatusAction(BaseModel):
+class FindAssignmentsBySubmissionStatusAction(ReadAction):
     """Find published assignments matching an explicit submission state."""
 
     action: Literal["find_assignments_by_submission_status"] = (
@@ -195,7 +218,7 @@ class FindAssignmentsBySubmissionStatusAction(BaseModel):
     ]
 
 
-class FindAssignmentBySubmissionRateAction(BaseModel):
+class FindAssignmentBySubmissionRateAction(ReadAction):
     action: Literal["find_assignment_by_submission_rate"] = "find_assignment_by_submission_rate"
     local_course_id: int
     # "below" for "fewer than X% submitted", "above" for "more than X%".
@@ -209,7 +232,7 @@ class SetActiveCourseAction(BaseModel):
     local_course_id: int
 
 
-class GetActiveCourseAction(BaseModel):
+class GetActiveCourseAction(ReadAction):
     action: Literal["get_active_course"] = "get_active_course"
 
 
@@ -270,7 +293,7 @@ class CreateQuizAction(BaseModel):
         return _normalize_due_date_str(value)
 
 
-class FetchQuizzesAction(BaseModel):
+class FetchQuizzesAction(ReadAction):
     action: Literal["fetch_quizzes"] = "fetch_quizzes"
     local_course_id: int
 
@@ -443,6 +466,9 @@ class SemanticIntentAction(BaseModel):
     """
 
     action: Literal["semantic_intent"] = "semantic_intent"
+    # Presentation, not capability: see ReadAction.final. Only meaningful on a
+    # read intent, and ignored on every other one.
+    final: bool = False
     intent: Literal[
         "read_courses",
         "read_assignments",

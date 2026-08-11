@@ -1125,6 +1125,11 @@ async def _run_tracked_read(
     re-raises unchanged — the caller's existing ToolExecutionError/
     HTTPException handling in handle_chat_message is what actually turns
     this into a user-facing error; this function only adds the log row."""
+    # `final` says how to present the result, not what to fetch (see
+    # ReadAction.final). It is not a parameter of the Canvas call and does not
+    # belong in the audit trail of one — two identical reads logged with
+    # different `final` values would read as two different queries.
+    parameters = {key: value for key, value in parameters.items() if key != "final"}
     call_log = ToolCallLog(
         conversation_id=conversation.id,
         user_id=user.id,
@@ -4540,6 +4545,10 @@ def _step_signature(action: Any) -> str | None:
     except Exception:
         return None
     arguments.pop("action", None)
+    # `final` says how to PRESENT the result, not what to fetch. Leaving it in
+    # would make the same query asked twice with different presentation look
+    # like two different reads, and pay for Canvas twice.
+    arguments.pop("final", None)
     return json.dumps({"action": name, "arguments": arguments}, sort_keys=True, default=str)
 
 
@@ -5381,6 +5390,18 @@ as many times as the request needs. ANY read can be a first step:
 That last one matters: a read is a step toward an answer, not the answer.
 When a question asks for one fact, fetch what you need and then RESPOND with
 the fact — do not leave the raw list as your reply and make the user find it.
+
+FINAL READS: when the instructor asked to SEE the data itself — "show me my
+assignments", "who submitted to lab 4", "list my courses" — the payload is
+the answer, and the app renders it as a proper table or list. Set "final":
+true on that read and the turn ends there:
+
+  {"action": "fetch_submissions", "assignment_reference": "lab 4",
+   "final": true}
+
+Use it only when the whole result is what was asked for. A question about one
+field of one row ("when is it due?", "did Alice submit?") is not a final read
+— fetch, then respond with the answer.
 
 Use respond as soon as the results in front of you answer the request, and do
 not re-request something you already have a result for. Stop early with
@@ -6658,8 +6679,8 @@ async def handle_chat_message(
                 break
             continue
 
-        # Any read continues; only a write, a clarify, or an explicit respond
-        # ends the turn.
+        # Any read continues unless the model marked it final; a write, a
+        # clarify, or an explicit respond always ends the turn.
         #
         # This used to be gated on a four-action whitelist, which meant a read
         # outside it terminated the turn at step 1 with its raw payload as the
@@ -6675,14 +6696,16 @@ async def handle_chat_message(
         # dedupe above, and the fact that the model has to emit respond/clarify
         # to say anything at all.
         #
-        # The cost is one extra call on a turn whose single read was already
-        # the whole answer ("show me my assignments" is now read → respond).
-        # That is the price of not maintaining a table of which questions are
-        # allowed to take two steps.
+        # `final` is how a read still ends a turn: the model saying the
+        # payload it asked for IS the answer, so the frontend renders the
+        # table rather than a sentence about it (see ReadAction.final). The
+        # default is the chaining one, so forgetting the flag costs a call and
+        # gives prose — never a raw dump in place of an answer.
         is_chainable_step = (
             pending_message_id is None
             and action.action in READ_ACTIONS
             and not result.get("clarify")
+            and not getattr(action, "final", False)
         )
         if not is_chainable_step:
             break

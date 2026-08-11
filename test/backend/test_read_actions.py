@@ -236,7 +236,7 @@ def test_fetch_submissions_explicit_verified_assignment_id_skips_chain(client):
     with patch("app.mcp_tools.dispatcher.get_submissions", new=AsyncMock(return_value=[])):
         second = _chat(
             client, headers, "show me submissions for assignment 1",
-            '{"action": "fetch_submissions", "course_name": "CPSC 310", "assignment_id": 10}',
+            '{"action": "fetch_submissions", "course_name": "CPSC 310", "assignment_id": 10, "final": true}',
             conversation_id=conversation_id,
         )
 
@@ -263,7 +263,7 @@ def test_fetch_submissions_unverified_assignment_id_falls_back_to_chain(client):
         body = _chat(
             client, headers, "show me submissions for the latest assignment",
             [
-                '{"action": "fetch_submissions", "course_name": "CPSC 310", "assignment_id": 999}',
+                '{"action": "fetch_submissions", "course_name": "CPSC 310", "assignment_id": 999, "final": true}',
                 '{"assignment_id": 222}',
             ],
         )
@@ -291,7 +291,7 @@ def test_fetch_submissions_reference_only_runs_full_chain(client):
             client, headers, "show me submissions for the latest assignment",
             [
                 '{"action": "fetch_submissions", "course_name": "CPSC 310", '
-                '"assignment_reference": "the latest assignment"}',
+                '"assignment_reference": "the latest assignment", "final": true}',
                 '{"assignment_id": 222}',
             ],
         )
@@ -319,10 +319,24 @@ def test_fetch_submissions_unresolvable_reference_returns_clarify(client):
                 '{"action": "fetch_submissions", "course_name": "CPSC 310", '
                 '"assignment_reference": "that one"}',
                 '{"assignment_id": null}',
+                # A resolver clarify is retryable — it means the SERVER could
+                # not resolve the reference, and the model may be able to by
+                # calling a read it has not called yet. This test predates that
+                # and supplied no reply for the retry, so the turn died on an
+                # exhausted mock and reported "the assistant is unavailable"
+                # instead of the clarify it exists to check for. The model
+                # trying again and still not knowing is what the assertion
+                # below is actually about.
+                '{"action": "fetch_submissions", "course_name": "CPSC 310", '
+                '"assignment_reference": "that one"}',
+                '{"assignment_id": null}',
+                '{"action": "fetch_submissions", "course_name": "CPSC 310", '
+                '"assignment_reference": "that one"}',
+                '{"assignment_id": null}',
             ],
         )
 
-    assert body["is_error"] is False
+    assert body["is_error"] is False, body["reply"]
     assert body["reply"]["clarify"] is True
     assert "Assignment 1" in body["reply"]["question"]
     assert "Assignment 2" in body["reply"]["question"]
@@ -335,10 +349,10 @@ def test_fetch_submissions_no_assignments_returns_clarify(client):
     with patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=[])):
         body = _chat(
             client, headers, "show me submissions for the latest assignment",
-            '{"action": "fetch_submissions", "course_name": "CPSC 310", "assignment_reference": "the latest assignment"}',
+            '{"action": "fetch_submissions", "course_name": "CPSC 310", "assignment_reference": "the latest assignment", "final": true}',
         )
 
-    assert body["is_error"] is False
+    assert body["is_error"] is False, body["reply"]
     assert body["reply"]["clarify"] is True
     assert "no assignments yet" in body["reply"]["question"]
 
