@@ -20,16 +20,30 @@ def _saved_connection(db):
 @pytest.mark.asyncio
 async def test_update_canvas_token_stores_canvas_time_zone():
     db = AsyncMock()
+    # Two scalar lookups, in order: no existing connection for this URL, then
+    # the refreshed user. The duplicate-token check sits between them but is
+    # patched out below, so it issues no query of its own — a third entry here
+    # left the refresh holding None, and update_canvas_token raised "404: User
+    # not found" before reaching the timezone these tests exist to assert on.
+    # Count the queries the code under test actually makes, not the steps.
     db.scalar = AsyncMock(side_effect=[None, SimpleNamespace(id=1)])
+    db.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: []))
     user = SimpleNamespace(id=1)
 
     # Patched at the Canvas boundary rather than on the helper, so the
     # extraction in fetch_canvas_time_zone is exercised too.
+    #
+    # Patching the *right* boundary is the point: this used to mock
+    # fetch_self, whose real payload has no time_zone at any nesting, so it
+    # asserted against a response Canvas does not send. The helper passed
+    # here and returned None against every real Canvas it ever ran on.
+    # test_fetches_the_profile_endpoint_not_the_user_endpoint below pins the
+    # URL so the mock can't drift back off the endpoint that has the field.
     with (
         patch("app.services.auth.validate_token", new=AsyncMock()),
         patch("app.services.auth.token_is_already_used", new=AsyncMock(return_value=False)),
         patch(
-            "app.services.canvas_timezone.fetch_self",
+            "app.services.canvas_timezone.fetch_self_profile",
             new=AsyncMock(return_value={"time_zone": "America/Vancouver"}),
         ),
         patch("app.services.auth.encrypt_canvas_token", return_value="encrypted-token"),
@@ -51,14 +65,21 @@ async def test_update_canvas_token_survives_an_unreachable_profile_endpoint():
     almost every test sets a Canvas token through this path.
     """
     db = AsyncMock()
+    # Two scalar lookups, in order: no existing connection for this URL, then
+    # the refreshed user. The duplicate-token check sits between them but is
+    # patched out below, so it issues no query of its own — a third entry here
+    # left the refresh holding None, and update_canvas_token raised "404: User
+    # not found" before reaching the timezone these tests exist to assert on.
+    # Count the queries the code under test actually makes, not the steps.
     db.scalar = AsyncMock(side_effect=[None, SimpleNamespace(id=1)])
+    db.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: []))
     user = SimpleNamespace(id=1)
 
     with (
         patch("app.services.auth.validate_token", new=AsyncMock()),
         patch("app.services.auth.token_is_already_used", new=AsyncMock(return_value=False)),
         patch(
-            "app.services.canvas_timezone.fetch_self",
+            "app.services.canvas_timezone.fetch_self_profile",
             new=AsyncMock(
                 side_effect=HTTPException(status_code=502, detail="Could not reach Canvas")
             ),
@@ -76,14 +97,21 @@ async def test_update_canvas_token_survives_an_unreachable_profile_endpoint():
 async def test_update_canvas_token_ignores_a_non_string_time_zone():
     """Canvas can return null for accounts that never set one."""
     db = AsyncMock()
+    # Two scalar lookups, in order: no existing connection for this URL, then
+    # the refreshed user. The duplicate-token check sits between them but is
+    # patched out below, so it issues no query of its own — a third entry here
+    # left the refresh holding None, and update_canvas_token raised "404: User
+    # not found" before reaching the timezone these tests exist to assert on.
+    # Count the queries the code under test actually makes, not the steps.
     db.scalar = AsyncMock(side_effect=[None, SimpleNamespace(id=1)])
+    db.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: []))
     user = SimpleNamespace(id=1)
 
     with (
         patch("app.services.auth.validate_token", new=AsyncMock()),
         patch("app.services.auth.token_is_already_used", new=AsyncMock(return_value=False)),
         patch(
-            "app.services.canvas_timezone.fetch_self",
+            "app.services.canvas_timezone.fetch_self_profile",
             new=AsyncMock(return_value={"time_zone": None}),
         ),
         patch("app.services.auth.encrypt_canvas_token", return_value="encrypted-token"),
@@ -91,3 +119,43 @@ async def test_update_canvas_token_ignores_a_non_string_time_zone():
         await update_canvas_token(db, user, "raw-token", "https://canvas.example.edu")
 
     assert _saved_connection(db).time_zone is None
+
+
+@pytest.mark.asyncio
+async def test_fetches_the_profile_endpoint_not_the_user_endpoint():
+    """The regression test the original fix needed and did not have.
+
+    /api/v1/users/self returns a Canvas User: id, name, sortable_name,
+    login_id, sis_user_id, integration_id, locale, permissions. No
+    time_zone, under any name. /api/v1/users/self/profile returns a Profile,
+    which has it. Reading the first meant fetch_canvas_time_zone returned
+    None for every connection ever saved — 0 of 2431 rows in the dev
+    database had a zone — and every due date was then interpreted and
+    labelled UTC regardless of where the instructor actually was.
+
+    Asserting on the URL rather than on a mocked payload is the whole point:
+    a mock can be handed a time_zone that real Canvas would never send, and
+    that is exactly how this passed while being wrong.
+    """
+    import httpx
+
+    from app.services.canvas_timezone import fetch_canvas_time_zone
+
+    requested: list[str] = []
+
+    async def fake_get(client, url, **kwargs):
+        requested.append(url)
+        return httpx.Response(
+            200,
+            json={"id": 1, "time_zone": "America/Vancouver"},
+            request=httpx.Request("GET", url),
+        )
+
+    with patch("app.integrations.canvas._get_with_retry", new=fake_get):
+        time_zone = await fetch_canvas_time_zone(
+            "raw-token", "https://canvas.example.edu"
+        )
+
+    assert time_zone == "America/Vancouver"
+    assert requested, "no Canvas request was made"
+    assert requested[0].endswith("/api/v1/users/self/profile"), requested

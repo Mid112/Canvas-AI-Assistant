@@ -208,6 +208,19 @@ class ChatResponse(BaseModel):
     # True when the assistant call failed (timeout, bad LLM output, etc.)
     # and `reply` is an error payload rather than tool output.
     is_error: bool = False
+    # The course the conversation ended up on, sent ONLY when the server moved
+    # the thread somewhere the client did not ask for — a course switch the
+    # instructor agreed to mid-conversation.
+    #
+    # conversation_id alone is not enough for the client to follow: the chat
+    # tab strip is keyed by course, so a bare id tells it which thread to
+    # remember but not which tab to put it in, and the reply lands under a tab
+    # still labelled with the course they left. Until now the only course
+    # signal was local_course_id inside proposed_action, which exists on write
+    # previews and nothing else — so agreeing to a switch and then *reading*
+    # something answered from the right course under the wrong tab.
+    course_id: int | None = None
+    course_name: str | None = None
 
 
 class MessageResponse(BaseModel):

@@ -1242,6 +1242,9 @@ def test_switching_course_and_back_returns_to_the_original_conversation(client):
             headers=headers,
         )
         conversation_a_id = first.json()["conversation_id"]
+        # Creating the first conversation is not moving an existing one, so
+        # there is nothing for the client to follow.
+        assert first.json()["course_id"] is None
 
         # Turn 2: switch to course 502 mid-thread — routes to a new
         # conversation B, not conversation A.
@@ -1261,6 +1264,12 @@ def test_switching_course_and_back_returns_to_the_original_conversation(client):
         )
         conversation_b_id = second.json()["conversation_id"]
         assert conversation_b_id != conversation_a_id
+        # The thread moved, so the response says where to. The chat tab strip
+        # is keyed by course, not by conversation id: without this the reply
+        # lands under a tab still named after the course they left, and the
+        # active-course selector never follows either.
+        assert second.json()["course_id"] == local_ids["COSC 502"]
+        assert second.json()["course_name"] == "COSC 502"
 
         # Turn 3: switch back to course 501 — must reuse conversation A,
         # not fork a third one.
@@ -1288,3 +1297,179 @@ def test_switching_course_and_back_returns_to_the_original_conversation(client):
     assert "first message about 501" in contents
     assert "back to 501" in contents
     assert "switch to 502" not in contents
+
+
+# Verifies: the moved-course signal is reported only when the thread actually
+# moved. An instructor accepted a "switch to Capstone Project?" offer, the
+# server routed the turn to that course's conversation and answered correctly
+# — and the UI stayed on the tab they had left, still labelled Math 101, with
+# Math 101 still the active course. conversation_id alone could not fix that:
+# the tab strip is keyed by course.
+def test_a_rerouted_turn_reports_the_course_it_landed_in(client):
+    from types import SimpleNamespace
+
+    headers = _register(client)
+
+    def _post(sent_id, routed):
+        with patch(
+            "app.routers.chat.handle_chat_message",
+            new=AsyncMock(
+                return_value=(routed, {"action": "respond", "message": "3 students."}, False)
+            ),
+        ):
+            return client.post(
+                "/api/v1/chat/",
+                json={"message": "yes", "conversation_id": sent_id},
+                headers=headers,
+            ).json()
+
+    moved = _post(
+        4,
+        SimpleNamespace(id=77, course_id=9, course_name="Capstone Project"),
+    )
+    assert moved["conversation_id"] == 77
+    assert moved["course_id"] == 9
+    assert moved["course_name"] == "Capstone Project"
+
+    # The ordinary turn: same conversation back, so nothing is reported and no
+    # existing turn changes behaviour. Firing on every turn instead would make
+    # the tab strip re-route continuously off a signal that means nothing.
+    stayed = _post(
+        4,
+        SimpleNamespace(id=4, course_id=9, course_name="Capstone Project"),
+    )
+    assert stayed["course_id"] is None
+    assert stayed["course_name"] is None
+
+
+# Verifies: accepting a course switch leaves each transcript able to stand on
+# its own. The course being left keeps its question and a line saying where the
+# work went; the course being entered gets the original request replayed as its
+# own message, so its answer is not an answer to a question filed elsewhere.
+def test_an_accepted_switch_splits_the_record_between_both_courses(client):
+    headers = _register(client)
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={
+                "canvas_token": unique_canvas_token(),
+                "canvas_url": "https://canvas.example.edu",
+            },
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 601 + offset,
+                "name": name,
+                "course_code": name,
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            }
+            for offset, name in enumerate(("Math 101", "Capstone Project"))
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.example.edu",
+            headers=headers,
+        )
+        local_ids = {c["name"]: c["local_id"] for c in courses.json()}
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"action": "respond", "message": "Math 101 has no assignment by that name."}'
+    )
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        first = client.post(
+            "/api/v1/chat/",
+            json={
+                "message": "who submitted to testing event 2?",
+                "local_course_id": local_ids["Math 101"],
+            },
+            headers=headers,
+        )
+        math_conversation_id = first.json()["conversation_id"]
+
+    # Stand in for the offer the resolvers build: an outstanding "switch to
+    # Capstone Project?" carrying the request it interrupted. Seeded rather
+    # than provoked so this test is about what an accepted switch *records*,
+    # not about which resolver noticed the assignment was elsewhere.
+    async def _seed_offer():
+        engine = create_async_engine(settings.DATABASE_URL)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                conversation = await db.get(Conversation, math_conversation_id)
+                conversation.field_memory = {
+                    **(conversation.field_memory or {}),
+                    "pending_expectation": {
+                        "field": "course_switch",
+                        "question": "Should I switch to Capstone Project?",
+                        "action": None,
+                        "candidates": [
+                            {"id": local_ids["Capstone Project"], "label": "Capstone Project"}
+                        ],
+                        "payload": {
+                            "user_message": "who submitted to testing event 2?",
+                            "assignment_reference": "Testing Event 2",
+                            "local_course_id": local_ids["Capstone Project"],
+                            "course_name": "Capstone Project",
+                        },
+                    },
+                }
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_seed_offer())
+
+    # A different answer, so the Capstone reply cannot be mistaken for an echo
+    # of the Math 101 one.
+    mock_adapter.generate.return_value = (
+        '{"action": "respond", "message": "3 students submitted to Testing Event 2."}'
+    )
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        answered = client.post(
+            "/api/v1/chat/",
+            json={"message": "yes", "conversation_id": math_conversation_id},
+            headers=headers,
+        )
+
+    capstone_conversation_id = answered.json()["conversation_id"]
+    assert capstone_conversation_id != math_conversation_id
+    assert answered.json()["course_id"] == local_ids["Capstone Project"]
+
+    def _messages(conversation_id):
+        return [
+            (m["role"], m["content"])
+            for m in client.get(
+                f"/api/v1/chat/conversations/{conversation_id}", headers=headers
+            ).json()["messages"]
+        ]
+
+    math = _messages(math_conversation_id)
+    capstone = _messages(capstone_conversation_id)
+
+    # Math 101 keeps what actually happened in it, including the "yes" — moving
+    # that across would leave an offer nobody answered.
+    assert ("user", "who submitted to testing event 2?") in math
+    assert ("user", "yes") in math
+    note = next(
+        content
+        for role, content in math
+        if role == "assistant" and "continuing in" in content
+    )
+    assert "Testing Event 2" in note
+    assert "Capstone Project" in note
+    # The answer belongs to the other course and must not be duplicated here.
+    assert not any("3 students submitted" in content for _role, content in math)
+
+    # Capstone gets the question its answer answers, and never the bare "yes".
+    assert ("user", "who submitted to testing event 2?") in capstone
+    assert ("user", "yes") not in capstone
+    assert any(
+        role == "assistant" and "3 students submitted" in content
+        for role, content in capstone
+    )

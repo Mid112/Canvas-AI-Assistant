@@ -110,6 +110,13 @@ def test_bulk_grade_update_builds_grades_tab_handoff():
         "student_ids": [101, 102],
         "student_count": 2,
         "new_grade": "100",
+        # "100" is absolute, so no per-student arithmetic happens and the
+        # relative-adjustment fields stay empty. They are asserted rather than
+        # ignored: a stray delta here would mean an absolute grade had been
+        # silently reinterpreted as an adjustment.
+        "grade_delta": None,
+        "student_grades": None,
+        "skipped_ungraded_count": 0,
         "feedback": "Curve applied",
     }
     assert result["message"] == (

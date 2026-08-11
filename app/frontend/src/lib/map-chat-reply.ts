@@ -228,6 +228,21 @@ function analyticsExplanation(
   return fallbackMessage;
 }
 
+/** "4 missing and 3 late" from the backend's per-category counts.
+ *
+ * Rendered alongside a combined result so a union is visibly a union. A zero
+ * side is kept ("4 missing and 0 late") for the same reason the backend keeps
+ * it: dropping it makes a real union look like a single-category answer. */
+function readStatusBreakdown(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const parts = Object.entries(value as Record<string, unknown>)
+    .filter((entry): entry is [string, number] => typeof entry[1] === "number")
+    .map(([status, count]) => `${count} ${status}`);
+  return parts.length ? parts.join(" and ") : undefined;
+}
+
 function buildAnalyticsPrimaryLink(
   courseId: number | undefined,
   options?: {
@@ -278,7 +293,15 @@ function buildStructuredAnalyticsResponse(
             typeof entry === "string" && entry.trim().length > 0,
         )
       : [];
-    const verb = status === "late" ? "submitted late" : "missing";
+    // "missing_late" is the union of both categories, requested when the
+    // instructor asks about missing AND late at once. It must never render as
+    // plain "missing" — that would present a combined group as one category.
+    const combined = status === "missing_late";
+    const verb = combined
+      ? "missing or submitted late"
+      : status === "late"
+        ? "submitted late"
+        : "missing";
     const lines: string[] = [`${assignmentName} · ${courseName}`];
     if (dueLabel) {
       lines.push(`Due: ${dueLabel}`);
@@ -288,12 +311,18 @@ function buildStructuredAnalyticsResponse(
       // Prefer the backend summary so zero-state wording stays in one place.
       lines.push(
         summary ??
-          (status === "late"
-            ? `No active students submitted this assignment late.`
-            : `No active students are missing this assignment.`),
+          (combined
+            ? `No active students are missing this assignment or submitted it late.`
+            : status === "late"
+              ? `No active students submitted this assignment late.`
+              : `No active students are missing this assignment.`),
       );
     } else {
       lines.push(`${count} student${count === 1 ? "" : "s"} ${verb}:`);
+      const breakdown = readStatusBreakdown(analytics.status_counts);
+      if (combined && breakdown) {
+        lines.push(`(${breakdown} — one combined group)`);
+      }
       for (const name of sample) {
         lines.push(`- ${name}`);
       }
@@ -314,7 +343,63 @@ function buildStructuredAnalyticsResponse(
       explanation: analyticsExplanation(fallbackMessage, summary),
       interpretedAction: primaryLink
         ? {
-            action: status === "late" ? "Late submissions" : "Missing submissions",
+            action: combined
+              ? "Missing or late submissions"
+              : status === "late"
+                ? "Late submissions"
+                : "Missing submissions",
+            course: courseName,
+            affectedStudents: `${count} student${count === 1 ? "" : "s"}`,
+            primaryLink,
+          }
+        : undefined,
+    };
+  }
+
+  if (action === "resolve_score_range") {
+    const count = readNumber(analytics.count) ?? 0;
+    const rangeLabel = readString(analytics.range_label) ?? "that range";
+    // The reading the server settled on ("Read as 70-90 percent — the
+    // assignment is out of 50 points, so 70-90 points isn't a possible
+    // score"). Always rendered: a percent-vs-points auto-pick the instructor
+    // can't see is one they can't correct before messaging the group.
+    const basisExplanation = readString(analytics.basis_explanation);
+    const sample = Array.isArray(analytics.sample)
+      ? analytics.sample.filter(
+          (entry): entry is string =>
+            typeof entry === "string" && entry.trim().length > 0,
+        )
+      : [];
+    const lines: string[] = [`${assignmentName} · ${courseName}`];
+
+    if (count === 0) {
+      lines.push(`No active students scored ${rangeLabel}.`);
+    } else {
+      lines.push(
+        `${count} student${count === 1 ? "" : "s"} scored ${rangeLabel}:`,
+      );
+      for (const name of sample) {
+        lines.push(`- ${name}`);
+      }
+      if (count > sample.length) {
+        lines.push(`- …and ${count - sample.length} more`);
+      }
+    }
+    if (basisExplanation) {
+      lines.push(basisExplanation);
+    }
+
+    // No status deep-link: the analytics page filters by submission status,
+    // which a score band is orthogonal to. Linking with no filter would
+    // present the whole roster as if it were the matched group.
+    const primaryLink = buildAnalyticsPrimaryLink(courseId, { assignmentId });
+
+    return {
+      content: lines.join("\n"),
+      explanation: analyticsExplanation(fallbackMessage, summary),
+      interpretedAction: primaryLink
+        ? {
+            action: `Students scoring ${rangeLabel}`,
             course: courseName,
             affectedStudents: `${count} student${count === 1 ? "" : "s"}`,
             primaryLink,
@@ -390,6 +475,18 @@ function buildGradeHandoffAction(
 
   const studentIds = readNumberArray(handoff.student_ids);
   const feedback = readString(handoff.feedback);
+  // A relative request resolves to a different target per student, so
+  // new_grade holds the instructor's literal "+5" and must NOT be prefilled
+  // as everyone's grade — that would set the whole class to 5.
+  const studentGrades = Array.isArray(handoff.student_grades)
+    ? (handoff.student_grades as Array<Record<string, unknown>>)
+        .map((row): [number, string] | undefined => {
+          const id = readNumber(row.user_id);
+          const grade = readString(row.new_grade);
+          return id !== undefined && grade ? [id, grade] : undefined;
+        })
+        .filter((entry): entry is [number, string] => entry !== undefined)
+    : undefined;
   return {
     action: "Update Grade",
     course: readString(handoff.course_name) ?? "Active course",
@@ -404,7 +501,10 @@ function buildGradeHandoffAction(
       href: instructorCourseGradesPrefillPath(courseId, {
         assignmentId,
         studentIds,
-        grade: readString(handoff.new_grade),
+        grade: studentGrades?.length
+          ? undefined
+          : readString(handoff.new_grade),
+        studentGrades,
         feedback,
       }),
     },
@@ -1161,6 +1261,7 @@ function mapReplyBody(
 
   if (
     reply.action === "resolve_missing_submissions" ||
+    reply.action === "resolve_score_range" ||
     reply.action === "find_assignment_by_submission_rate"
   ) {
     const analyticsResponse = buildStructuredAnalyticsResponse(

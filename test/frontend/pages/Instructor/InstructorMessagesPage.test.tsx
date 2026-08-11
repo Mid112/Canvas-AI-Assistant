@@ -324,6 +324,16 @@ describe("InstructorMessagesPage", () => {
         expect.objectContaining({ preSelectedIds: ["101"] }),
       ),
     );
+    // Wait on the settled state, not on the request that will produce it.
+    // The waitFor above only proves fetchMessageDraft was CALLED; applying its
+    // result is a further async hop. Asserting the warning's absence straight
+    // afterwards passed alone and failed in the full suite, where the render
+    // had not caught up yet — absence is true before the state arrives as well
+    // as after, so it can only be checked once something positive says the
+    // selection landed.
+    expect(
+      await screen.findByText("1 student selected — private message"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText(
         "No students selected — this will be a public course announcement.",

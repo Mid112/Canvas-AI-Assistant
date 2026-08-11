@@ -502,7 +502,17 @@ async def test_execute_intent_preview_read_action_non_numeric_course_id_treated_
 
 
 @pytest.mark.asyncio
-async def test_execute_intent_preview_create_assignment_missing_field_downgrades_to_clarify():
+async def test_execute_intent_preview_create_assignment_no_longer_clarifies():
+    """create_assignment is a FORM_HANDOFF_ACTION now: it never asks.
+
+    This used to demand a point value, then a description, then a title,
+    each as its own clarify turn. What replaced it: the model proposes with
+    whatever it understood, chat.py drafts the title and description from
+    the instructor's own words, and the assignment form opens pre-filled
+    with every field editable. validate_assignment_for_create still refuses
+    an incomplete write at confirm, so nothing incomplete reaches Canvas —
+    the clarify was never what guaranteed that.
+    """
     db = AsyncMock()
     user = MagicMock(id=1)
     action = IntentPreviewAction(
@@ -510,46 +520,29 @@ async def test_execute_intent_preview_create_assignment_missing_field_downgrades
         proposed_action={
             "action": "create_assignment", "local_course_id": 1,
             "title": "HW1", "description": "d", "due_date": "2030-01-01T00:00:00",
-            # points_possible omitted — the missing required field
+            # points_possible omitted — used to be a clarify, now the form's
         },
     )
 
     result = await execute_tool(db, user, action)
 
-    assert result["action"] == "clarify"
-    assert "points" in result["question"].lower()
-    assert result["partial_plan"]["title"] == "HW1"
+    assert result["action"] != "clarify"
+    assert result.get("clarify") is not True
 
 
 @pytest.mark.asyncio
-async def test_execute_intent_preview_create_assignment_lists_all_missing_fields():
-    """Ticket 16 / #1440: ask for every missing required field together."""
+async def test_execute_intent_preview_create_assignment_bare_request_previews():
+    """"create an assignment" with nothing else is a complete request."""
     db = AsyncMock()
     user = MagicMock(id=1)
     action = IntentPreviewAction(
         summary="create an assignment",
-        proposed_action={
-            "action": "create_assignment",
-            "local_course_id": 1,
-            "title": "HW1",
-            "description": "",
-            "due_date": "2030-01-01T00:00:00",
-            # points_possible omitted
-        },
+        proposed_action={"action": "create_assignment", "local_course_id": 1},
     )
 
     result = await execute_tool(db, user, action)
 
-    assert result["action"] == "clarify"
-    question = result["question"].lower()
-    assert "description" in question
-    assert "point" in question
-    assert "one message" in question
-    # Already-known fields stay in partial_plan; missing ones do not.
-    assert result["partial_plan"]["title"] == "HW1"
-    assert result["partial_plan"]["due_date"] == "2030-01-01T00:00:00"
-    assert "description" not in result["partial_plan"]
-    assert "points_possible" not in result["partial_plan"]
+    assert result["action"] != "clarify"
 
 
 @pytest.mark.asyncio

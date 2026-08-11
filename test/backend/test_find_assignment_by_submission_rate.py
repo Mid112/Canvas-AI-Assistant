@@ -186,8 +186,10 @@ def test_picks_latest_due_date_among_qualifying_assignments_and_chains_into_upda
     reply = body["reply"]
     assert reply["action"] == "intent_preview"
     assert reply["proposed_action"]["assignment_id"] == 222
-    # Intent previews normalize the model's due date before rendering so the
-    # preview, edit form, and eventual Canvas write all use one instant.
+    # Intent-preview surfaces the model's due_date resolved against the
+    # instructor's timezone, which is why the offset is spelled out rather than
+    # left implicit. Same instant either way — this pinned the naive spelling
+    # from before resolution moved ahead of the preview.
     assert reply["proposed_action"]["due_date"] == "2026-06-04T00:00:00+00:00"
 
     logs = _tool_call_log_actions(body["conversation_id"])

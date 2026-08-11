@@ -407,12 +407,29 @@ async def submit_grade_update(
         exclude_workflow_id=exclude_workflow_id,
     )
 
+    # The key identifies a TRANSITION, not a destination.
+    #
+    # Without the current grade in it, "set student 41 to 19" hashes the same
+    # whenever it is asked, and the result is cached for IDEMPOTENCY_RETENTION
+    # (7 days). So 18 -> 19, then 19 -> 16, then 16 -> 19 again collapsed: the
+    # third write matched the first key, replayed its stored Canvas response,
+    # and never called Canvas. The app read "19" out of that stale body and
+    # reported success while Canvas still held 16 — a write that silently did
+    # not happen, which is worse than one that visibly failed.
+    #
+    # Including the pre-write grade keeps the protection this exists for and
+    # drops the false positive. A genuine double-submit is two requests made
+    # from the same starting state, so it still hashes identically and is
+    # still deduped. A deliberate re-set after the value moved starts from a
+    # different state, so it is a different key and actually runs.
     idem_key = build_idempotency_key(
         "update_grade",
         user.id,
         course.id,
         body.assignment_id,
         body.user_id,
+        submission.grade,
+        submission.score,
         proposed_grade,
         feedback,
     )

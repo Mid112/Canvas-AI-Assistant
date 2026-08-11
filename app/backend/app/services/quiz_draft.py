@@ -1,7 +1,7 @@
 import html
 import json
 import re
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import httpx
 from fastapi import HTTPException, status
@@ -75,11 +75,8 @@ def _reconcile_points(
     return points_possible, questions
 
 
-async def generate_quiz_draft(
-    body: QuizDraftRequest, db: AsyncSession, user_id: int
-) -> QuizDraftResponse:
-    system = (
-        "You help instructors draft Canvas quizzes. "
+QUIZ_DRAFT_SYSTEM_PROMPT = (
+    "You help instructors draft Canvas quizzes. "
         "Respond with JSON only: "
         '{"title": "...", "description": "...", "due_at": "ISO8601 or null", '
         '"points_possible": number or null, "allowed_attempts": number or null, '
@@ -96,8 +93,49 @@ async def generate_quiz_draft(
         "the questions rather than inventing a different total. "
         "For multiple_choice_question and true_false_question, set weight 100 on the "
         "correct answer and 0 on incorrect ones. "
-        "Description and question_text must be plain text only."
-    )
+    "Description and question_text must be plain text only."
+)
+
+# Same split as assignment_draft's: the quiz review form is reached with a
+# prompt an instructor wrote, a chat turn may carry no topic at all, and a
+# quiz invented from nothing looks finished. See the comment there.
+CHAT_QUIZ_DRAFT_SYSTEM_PROMPT = (
+    f"{QUIZ_DRAFT_SYSTEM_PROMPT} "
+    "If the request does not say what the quiz is about — "
+    '"make a quiz" and nothing more — return {"title": "", "description": ""}. '
+    "Do not invent a topic, a placeholder title such as \"New Quiz\", or "
+    "filler questions. Returning empty is correct and expected here."
+)
+
+
+async def draft_quiz_content(prompt: str, *, adapter: Any) -> tuple[str, str]:
+    """A title and description written from the instructor's own words.
+
+    The quiz half of draft_assignment_content — see that docstring for why
+    this reads the whole request instead of one field at a time. Only the
+    title and description are taken here: questions, point splits and time
+    limits belong to the quiz review form, where the instructor can see and
+    change each one before anything reaches Canvas.
+
+    Never raises. Both values come back empty on any failure and the caller
+    keeps what it had.
+    """
+    try:
+        raw = await adapter.generate(CHAT_QUIZ_DRAFT_SYSTEM_PROMPT, prompt)
+        data = loads_llm_json(raw)
+    except Exception:
+        return "", ""
+    if not isinstance(data, dict):
+        return "", ""
+    title = str(data.get("title") or "").strip()
+    description = _plain_text(str(data.get("description") or "")).strip()
+    return title, description
+
+
+async def generate_quiz_draft(
+    body: QuizDraftRequest, db: AsyncSession, user_id: int
+) -> QuizDraftResponse:
+    system = QUIZ_DRAFT_SYSTEM_PROMPT
     adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
 
     try:

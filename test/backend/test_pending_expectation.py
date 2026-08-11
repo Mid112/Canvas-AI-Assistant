@@ -101,6 +101,24 @@ def test_out_of_range_ordinal_does_not_resolve():
     assert resolve_against_expectation(expectation, "the fifth one") is None
 
 
+# Verifies an ordinary sentence containing "one"/"two" is not read as an
+# ordinal. Scanning for those cardinals anywhere in the reply made "which one
+# has more students?" — a question — resolve to candidate 1, and "no one
+# submitted yet" do the same. On a yes/no course-switch offer that false
+# positive doesn't just pick the wrong item, it consents: the conversation
+# moves to another Canvas course and replays the request there.
+@pytest.mark.requirement("FR3.4")
+def test_a_cardinal_inside_a_sentence_is_not_an_ordinal():
+    expectation = _expectation(["Lab Report A", "Lab Report B", "Final"])
+
+    assert resolve_against_expectation(expectation, "which one has more students?") is None
+    assert resolve_against_expectation(expectation, "no one submitted yet") is None
+    assert resolve_against_expectation(expectation, "can you show me the two students") is None
+    # Still an answer when the whole reply IS the word — that is unambiguous.
+    assert resolve_against_expectation(expectation, "two")["id"] == 101
+    assert resolve_against_expectation(expectation, "the second one")["id"] == 101
+
+
 # Verifies two equally-long labels stay ambiguous — the same rule the rest of
 # the pre-pass follows.
 @pytest.mark.requirement("FR3.4")
@@ -291,18 +309,32 @@ def test_clarify_retries_are_capped_and_then_reach_the_instructor(client):
         )
 
     assert body["reply"].get("clarify") is True, body
-    # Three passes — the initial one plus two retries — each costing a main
-    # call and one _resolve_assignment_reference call. Pinned as a number
-    # because the cap is the whole point: without it this turn would keep
-    # going to MAX_TURN_STEPS.
-    assert mock_adapter.generate.await_count == 6
+    # Four calls, pinned as a number because the cap is the whole point:
+    # without it this turn would keep going to MAX_TURN_STEPS.
+    #
+    # It used to be six — three passes at a main call plus one
+    # _resolve_assignment_reference call each. The model here returns the
+    # byte-identical action every time, so the in-turn dedupe now serves the
+    # second and third passes from the result already in hand instead of
+    # re-running the resolver, and the third repeat ends the turn. Same
+    # clarify reaches the instructor, two fewer calls to get there.
+    #
+    # The retry budget still does its job for what it is actually for: a model
+    # that goes back and calls a DIFFERENT tool has a different signature, so
+    # dedupe never fires (see the test above, still three calls).
+    assert mock_adapter.generate.await_count == 4
 
 
-# Verifies a missing-field clarify is still terminal. It has no candidates
-# because there is nothing to look up — only the instructor knows the answer,
-# and retrying would spend calls to ask them the same thing anyway.
+# Verifies a create_assignment missing a required field is terminal — and
+# that it now ends in a preview rather than a question.
+#
+# This used to assert the clarify. create_assignment is a FORM_HANDOFF_ACTION
+# now: a missing due date is collected on the assignment form, where it sits
+# next to every other field and can be filled in without spending a turn.
+# The terminality half of the original point still holds and is still worth
+# pinning — the turn resolves in one model call either way, with no retry.
 @pytest.mark.requirement("FR3.4")
-def test_missing_field_clarify_is_still_terminal(client):
+def test_create_assignment_missing_a_field_previews_and_is_terminal(client):
     headers, local_course_id = _register(client)
 
     body, mock_adapter = _chat(
@@ -312,6 +344,8 @@ def test_missing_field_clarify_is_still_terminal(client):
         ', "title": "Final", "description": "A final assessment for the term."}}',
     )
 
-    assert body["reply"].get("clarify") is True, body
-    assert "clarify_candidates" not in body["reply"]
+    assert body["reply"].get("clarify") is not True, body
+    assert body["reply"]["action"] == "intent_preview", body
+    # Title and description were both given, so nothing needed drafting and
+    # the turn still costs exactly one model call.
     assert mock_adapter.generate.await_count == 1

@@ -92,6 +92,10 @@ export function instructorCourseGradesPrefillPath(
     assignmentId?: number | string;
     studentIds?: Array<number | string>;
     grade?: string;
+    // Per-student targets as [userId, grade] pairs, for a relative change
+    // ("add 5 marks") where each student lands on a different number. Set
+    // instead of `grade`, never alongside it.
+    studentGrades?: Array<[number | string, string]>;
     feedback?: string | null;
   },
 ) {
@@ -107,6 +111,12 @@ export function instructorCourseGradesPrefillPath(
   }
   if (options?.grade) {
     params.set("grade", options.grade);
+  }
+  if (options?.studentGrades?.length) {
+    params.set(
+      "studentGrades",
+      options.studentGrades.map(([id, grade]) => `${id}:${grade}`).join(","),
+    );
   }
   if (options?.feedback) {
     params.set("feedback", options.feedback);

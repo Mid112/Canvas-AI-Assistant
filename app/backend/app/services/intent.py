@@ -34,7 +34,13 @@ _FIELD_ALLOWLIST: dict[str, frozenset[str]] = {
     "update_assignment": frozenset(
         {"title", "description", "due_date", "points_possible"}
     ),
-    "update_grade": frozenset({"new_grade", "feedback", "reason"}),
+    # recipient_handle lets a grade/feedback turn target a set an earlier
+    # resolver already computed, the same way send_message does. It is a
+    # handle string, not an ID: materialize_resolved_set re-checks that it
+    # belongs to this conversation and has not expired before it names anyone.
+    "update_grade": frozenset(
+        {"new_grade", "feedback", "reason", "recipient_handle"}
+    ),
     "send_message": frozenset(
         {
             "subject",
@@ -55,6 +61,7 @@ _READ_INTENTS = {
     "read_quizzes": "fetch_quizzes",
     "analyze_submissions": "analyze_course_submissions",
     "find_missing_submissions": "resolve_missing_submissions",
+    "find_score_range": "resolve_score_range",
     "find_assignments_by_submission_status": "find_assignments_by_submission_status",
     "find_assignment_by_rate": "find_assignment_by_submission_rate",
 }
@@ -66,6 +73,7 @@ _COURSE_REQUIRED_READS = {
     "fetch_quizzes",
     "analyze_course_submissions",
     "resolve_missing_submissions",
+    "resolve_score_range",
     "find_assignments_by_submission_status",
     "find_assignment_by_submission_rate",
 }
@@ -172,19 +180,44 @@ def normalize_semantic_intent(
         if intent.criteria:
             return _unsupported_criteria(intent)
         result: dict[str, Any] = {"action": action_name}
+        # Carried across the semantic boundary like any other read field: the
+        # semantic path is the one the prompt steers the model down, so a
+        # `final` that cannot cross it would mean "show me my assignments"
+        # always costs a second call and always answers in prose.
+        if intent.final:
+            result["final"] = True
         if local_course_id is not None:
             result["local_course_id"] = local_course_id
 
-        if action_name in {"fetch_submissions", "resolve_missing_submissions"}:
+        if action_name in {
+            "fetch_submissions", "resolve_missing_submissions", "resolve_score_range"
+        }:
             if intent.assignment_reference:
                 result["assignment_reference"] = intent.assignment_reference
+        if action_name == "resolve_score_range":
+            if intent.min_score is None or intent.max_score is None:
+                return {
+                    "action": "clarify",
+                    "clarify": True,
+                    "question": "What score range should I use?",
+                    "partial_plan": {"local_course_id": local_course_id},
+                }
+            result["min_score"] = intent.min_score
+            result["max_score"] = intent.max_score
+            # Deliberately only forwarded when the model set it. A null basis
+            # is the signal that the instructor did not name a unit, which is
+            # what lets the resolver compare both readings instead of
+            # committing to a guess.
+            if intent.basis is not None:
+                result["basis"] = intent.basis
         if action_name in {"resolve_missing_submissions", "analyze_course_submissions"}:
-            # Both actions take the same mutually-exclusive missing/late
-            # category. Leaving it off analyze_course_submissions let its
-            # schema default ("missing") answer a question about late work
-            # with missing work — the wrong students, presented as the right
-            # ones.
-            result["status"] = intent.status or "missing"
+            # Both actions take the same missing/late categories. Leaving it
+            # off analyze_course_submissions let its schema default
+            # ("missing") answer a question about late work with missing work
+            # — the wrong students, presented as the right ones.
+            # Carried as a list: the intent may name both categories, and the
+            # action schema resolves that to their union.
+            result["status"] = list(intent.status) if intent.status else ["missing"]
         if action_name == "find_assignment_by_submission_rate":
             if intent.comparator is None or intent.threshold_percent is None:
                 return {
@@ -202,9 +235,17 @@ def normalize_semantic_intent(
                 # what separates them. Defaulting straight to missing threw
                 # that away, so an unscoped "which assignments have late
                 # submissions?" came back listing missing ones instead.
+                #
+                # Membership, not equality: status is a tuple of categories
+                # now, so "late" only wins when it was asked for on its own.
+                # This action's enum has no combined option — a request naming
+                # both is a student-level union, which is
+                # resolve_missing_submissions' job, not this assignment-level
+                # search's.
+                requested = intent.status or ()
                 submission_status = (
                     "late_submissions"
-                    if intent.status == "late"
+                    if tuple(requested) == ("late",)
                     else "missing_submissions"
                 )
             if submission_status is None:

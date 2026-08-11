@@ -141,10 +141,24 @@ async def test_create_rejects_past_due_date(db):
 
 @pytest.mark.asyncio
 async def test_create_rejects_invalid_due_date_format(db):
+    """Genuinely unreadable text is still refused.
+
+    This used to assert that "next friday" was unreadable, which it was —
+    dateutil parses calendar notation, not English, so every relative phrase
+    an instructor typed reached the due-date field as its own literal text.
+    relative_dates resolves them now, so the case moved to something that
+    really has no date in it.
+    """
     with pytest.raises(HTTPException) as exc:
-        await _create(db, due_date="next friday")
+        await _create(db, due_date="whenever you feel like it")
     assert exc.value.status_code == 422
     assert "invalid due date" in exc.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_create_accepts_a_relative_due_date(db):
+    """"next friday" is a date an instructor gave us, not a parse failure."""
+    await _create(db, due_date="next friday")
 
 
 @pytest.mark.asyncio

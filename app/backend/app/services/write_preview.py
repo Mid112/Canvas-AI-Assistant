@@ -60,8 +60,12 @@ def _reversibility_fields(action_type: str) -> dict:
 def _preview_create_assignment(
     course: Course, params: dict, instructor_timezone: str | None = None
 ) -> dict:
-    title = params.get("title", "Untitled")
-    description = params.get("description", "")
+    # Blank, not just absent: under FORM HANDOFF an untitled assignment
+    # arrives as title="" rather than with the key missing, and .get's default
+    # does not fire on a present empty string — the preview read
+    # "Create assignment '' in Capstone Project".
+    title = (params.get("title") or "").strip() or "Untitled"
+    description = params.get("description") or ""
     due_date = params.get("due_date")
     points_possible = params.get("points_possible")
 
@@ -93,8 +97,9 @@ def _preview_create_assignment(
 def _preview_create_quiz(
     course: Course, params: dict, instructor_timezone: str | None = None
 ) -> dict:
-    title = params.get("title", "Untitled Quiz")
-    description = params.get("description", "")
+    # Blank-or-absent, same as _preview_create_assignment above.
+    title = (params.get("title") or "").strip() or "Untitled Quiz"
+    description = params.get("description") or ""
     due_date = params.get("due_date")
     points_possible = params.get("points_possible")
     questions = params.get("questions") or []

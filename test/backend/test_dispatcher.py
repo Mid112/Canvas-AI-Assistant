@@ -4,11 +4,9 @@ import pytest
 
 from app.mcp_tools.dispatcher import (
     ToolExecutionError,
-    _build_create_assignment_missing_fields_question,
     _create_assignment_due_date_in_past,
-    _create_assignment_missing_field,
-    _create_assignment_missing_fields,
     _extract_json,
+    _grade_target_is_unstated,
     parse_action,
 )
 from app.mcp_tools.schemas import FetchAssignmentsAction, FetchCoursesAction, FetchStudentsAction
@@ -126,88 +124,36 @@ def test_wrong_type():
         parse_action('{"action": "fetch_assignments", "local_course_id": "not_a_number"}')
 
 
-# testing _create_assignment_missing_fields / batch clarify (#1440)
-
-_COMPLETE_PROPOSAL = {
-    "action": "create_assignment",
-    "local_course_id": 1,
-    "title": "test4",
-    "description": "Covers chapters 1-4",
-    "due_date": "2026-11-20",
-    "points_possible": 20,
-}
+# create_assignment no longer has a missing-field clarify at all — it is a
+# FORM_HANDOFF_ACTION, so it proposes with whatever it has and the assignment
+# form collects the rest. The helpers these tests exercised
+# (_create_assignment_missing_fields / _build_..._question and their field
+# tables) are gone with it; test_write_form_handoff.py covers what replaced
+# them. The one gap that still gets asked about is a grade with no target.
 
 
-# Verifies: Missing fields empty when all fields present.
-def test_missing_fields_none_when_all_fields_present():
-    assert _create_assignment_missing_fields(_COMPLETE_PROPOSAL) == []
-    assert _create_assignment_missing_field(_COMPLETE_PROPOSAL) is None
+# Verifies: a grade request naming neither a student nor an assignment is the
+# only remaining thing worth asking about.
+def test_grade_target_unstated_when_nothing_names_a_target():
+    assert _grade_target_is_unstated({"action": "update_grade"}) is True
 
 
-# Verifies: Missing fields detects empty string description.
-def test_missing_fields_detects_empty_string_description():
-    # The regression this guards: a model can satisfy Pydantic's `str`
-    # type with "" instead of actually asking, which schema validation
-    # alone doesn't catch since proposed_action isn't validated against
-    # CreateAssignmentAction until confirm time.
-    proposal = {**_COMPLETE_PROPOSAL, "description": ""}
-    assert _create_assignment_missing_fields(proposal) == ["description"]
-    assert _create_assignment_missing_field(proposal) == "description"
+# Verifies: either half is enough — the resolvers turn words into IDs, so
+# asking first would throw that work away.
+def test_grade_target_stated_by_a_reference_alone():
+    assert _grade_target_is_unstated(
+        {"action": "update_grade", "student_reference": "milliken"}
+    ) is False
+    assert _grade_target_is_unstated(
+        {"action": "update_grade", "assignment_id": 7}
+    ) is False
 
 
-# Verifies: Missing fields detects whitespace only title.
-def test_missing_fields_detects_whitespace_only_title():
-    proposal = {**_COMPLETE_PROPOSAL, "title": "   "}
-    assert _create_assignment_missing_fields(proposal) == ["title"]
-
-
-# Verifies: Missing fields detects absent due date.
-def test_missing_fields_detects_absent_due_date():
-    proposal = {k: v for k, v in _COMPLETE_PROPOSAL.items() if k != "due_date"}
-    assert _create_assignment_missing_fields(proposal) == ["due_date"]
-
-
-# Verifies: Explicit null points means ungraded and is complete (Ticket 21).
-def test_null_points_possible_means_ungraded_is_complete():
-    proposal = {**_COMPLETE_PROPOSAL, "points_possible": None}
-    assert _create_assignment_missing_fields(proposal) == []
-    assert _create_assignment_missing_field(proposal) is None
-
-
-# Verifies: Absent points_possible still asks graded-vs-ungraded (Ticket 21).
-def test_missing_field_detects_absent_points_possible():
-    proposal = {k: v for k, v in _COMPLETE_PROPOSAL.items() if k != "points_possible"}
-    assert _create_assignment_missing_fields(proposal) == ["points_possible"]
-    assert _create_assignment_missing_field(proposal) == "points_possible"
-
-
-# Verifies (#1440): Lists every missing required field together, in order.
-def test_missing_fields_lists_all_missing_required_fields():
-    proposal = {
-        **{k: v for k, v in _COMPLETE_PROPOSAL.items() if k != "points_possible"},
-        "title": "",
-        "description": "",
-    }
-    assert _create_assignment_missing_fields(proposal) == [
-        "title",
-        "description",
-        "points_possible",
-    ]
-    # Back-compat wrapper still returns the first missing field.
-    assert _create_assignment_missing_field(proposal) == "title"
-
-
-# Verifies (#1440): Batch clarify copy names every missing field.
-def test_build_create_assignment_missing_fields_question_lists_all():
-    question = _build_create_assignment_missing_fields_question(
-        ["description", "points_possible"]
-    )
-    assert "description" in question
-    assert "point value" in question
-    assert "one message" in question
-
-    single = _build_create_assignment_missing_fields_question(["due_date"])
-    assert single == "When is this assignment due?"
+# Verifies: blank strings are not a target.
+def test_grade_target_ignores_blank_references():
+    assert _grade_target_is_unstated(
+        {"action": "update_grade", "student_reference": "   "}
+    ) is True
 
 
 #testing _create_assignment_due_date_in_past

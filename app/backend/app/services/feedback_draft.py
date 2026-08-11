@@ -14,6 +14,55 @@ from app.services.feedback_validation import (
 from app.services.llm.json_extraction import loads_llm_json
 from app.services.llm.llm_setting import get_llm_adapter
 
+FEEDBACK_DRAFT_SYSTEM_PROMPT = (
+    "You help instructors draft Canvas submission feedback. "
+    "Respond with JSON only: "
+    '{"new_grade": "letter or number", "feedback": "plain text comment"}. '
+    "The feedback must be constructive, specific, and suitable to post as "
+    "a Canvas submission comment. Address the learner in second person "
+    "('you') and never invent or include a student name, email, or login."
+)
+
+# The chat variant writes a comment and nothing else. The form's prompt asks
+# for a grade alongside it, which is right there — the instructor is looking
+# at one submission and deciding what it is worth — and wrong here, where the
+# same request may cover a whole band of students who already have different
+# marks. A single invented grade applied across them would overwrite real
+# results, so this one is told to leave it alone.
+CHAT_FEEDBACK_DRAFT_SYSTEM_PROMPT = (
+    "You help instructors write Canvas submission feedback. "
+    'Respond with JSON only: {"feedback": "plain text comment"}. '
+    "Write the comment the instructor described, in their voice, ready to "
+    "post as-is. Address the learner in second person ('you'). Never name a "
+    "student, never mention a score or a grade, and never write anything that "
+    "assumes which student is reading it — the same comment may go to several "
+    "people at once. "
+    "If the request does not say what the feedback should convey, return "
+    '{"feedback": ""} rather than inventing praise or criticism.'
+)
+
+
+async def draft_feedback_comment(prompt: str, *, adapter) -> str:
+    """A submission comment written from the instructor's own words.
+
+    Chat had no way to reach the feedback generator: "give encouraging
+    feedback to students who scored 70-96" resolved the three students
+    correctly and then handed the Grades tab an empty comment box, because
+    nothing turned the request into the comment it described.
+
+    Never raises and never invents. On any failure — or on a request with
+    nothing to say — this returns "" and the instructor writes the comment
+    themselves on the form, exactly as before.
+    """
+    try:
+        raw = await adapter.generate(CHAT_FEEDBACK_DRAFT_SYSTEM_PROMPT, prompt)
+        data = loads_llm_json(raw)
+    except Exception:
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("feedback") or "").strip()
+
 
 async def generate_feedback_draft(
     local_course_id: int,
@@ -38,14 +87,7 @@ async def generate_feedback_draft(
             ),
         )
 
-    system = (
-        "You help instructors draft Canvas submission feedback. "
-        "Respond with JSON only: "
-        '{"new_grade": "letter or number", "feedback": "plain text comment"}. '
-        "The feedback must be constructive, specific, and suitable to post as "
-        "a Canvas submission comment. Address the learner in second person "
-        "('you') and never invent or include a student name, email, or login."
-    )
+    system = FEEDBACK_DRAFT_SYSTEM_PROMPT
     # Do not send student names/emails/logins to the LLM (#908). Keep only
     # assignment context and the instructor's prompt; the UI still receives
     # student_name back from the request body for display.
