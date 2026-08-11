@@ -1,4 +1,5 @@
 """Unit tests for services/chat.py::build_system_prompt's Canvas-token gating."""
+from app.mcp_tools.schemas import FORM_HANDOFF_ACTIONS
 from app.services.chat import build_system_prompt
 
 
@@ -28,13 +29,28 @@ def test_build_system_prompt_distinguishes_assignment_feedback_from_private_mess
     assert "Do not guess between update_grade and send_message" in normalized_prompt
 
 
+def test_every_form_handoff_action_is_exempt_from_the_ambiguity_check():
+    # The exemption used to name create_quiz and update_grade only, so this test
+    # pinned that phrase. It now covers all four form-handoff actions, and the
+    # set is derived rather than restated: a fifth one added to
+    # FORM_HANDOFF_ACTIONS without a matching prompt change fails here.
+    normalized_prompt = " ".join(build_system_prompt().split())
+    exemption = normalized_prompt.split("AMBIGUITY CHECK", 1)[1].split("FORM HANDOFF", 1)[0]
+
+    for action in FORM_HANDOFF_ACTIONS:
+        assert action in exemption, (
+            f"{action} hands off to a form, so the AMBIGUITY CHECK must exempt "
+            "it; otherwise the model interrogates the user for fields the form "
+            "is there to collect"
+        )
+
+
 def test_build_system_prompt_routes_grade_requests_to_grades_tab_handoff():
     # Covers the clarify-loop fix: missing assignment/student fields should not
     # stop grade requests before the backend resolver can open the Grades tab.
     prompt = build_system_prompt()
     normalized_prompt = " ".join(prompt.split())
 
-    assert "create_quiz and update_grade are exceptions" in normalized_prompt
     assert "UPDATE_GRADE HANDOFF" in prompt
     assert "propose update_grade immediately" in normalized_prompt
     assert "opens the dedicated Grades tab" in normalized_prompt
