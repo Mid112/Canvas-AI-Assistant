@@ -96,6 +96,17 @@ QUIZ_DRAFT_SYSTEM_PROMPT = (
     "Description and question_text must be plain text only."
 )
 
+# Same split as assignment_draft's: the quiz review form is reached with a
+# prompt an instructor wrote, a chat turn may carry no topic at all, and a
+# quiz invented from nothing looks finished. See the comment there.
+CHAT_QUIZ_DRAFT_SYSTEM_PROMPT = (
+    f"{QUIZ_DRAFT_SYSTEM_PROMPT} "
+    "If the request does not say what the quiz is about — "
+    '"make a quiz" and nothing more — return {"title": "", "description": ""}. '
+    "Do not invent a topic, a placeholder title such as \"New Quiz\", or "
+    "filler questions. Returning empty is correct and expected here."
+)
+
 
 async def draft_quiz_content(prompt: str, *, adapter: Any) -> tuple[str, str]:
     """A title and description written from the instructor's own words.
@@ -110,7 +121,7 @@ async def draft_quiz_content(prompt: str, *, adapter: Any) -> tuple[str, str]:
     keeps what it had.
     """
     try:
-        raw = await adapter.generate(QUIZ_DRAFT_SYSTEM_PROMPT, prompt)
+        raw = await adapter.generate(CHAT_QUIZ_DRAFT_SYSTEM_PROMPT, prompt)
         data = loads_llm_json(raw)
     except Exception:
         return "", ""

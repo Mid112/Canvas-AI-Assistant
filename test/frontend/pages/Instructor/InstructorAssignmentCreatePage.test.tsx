@@ -926,4 +926,114 @@ describe("InstructorAssignmentCreatePage", () => {
       screen.queryByText(/Writing a full description from your request/),
     ).not.toBeInTheDocument();
   });
+
+  /* "can you create an assignment?" — no subject matter anywhere in it.
+   *
+   * This used to land on Review showing a "Generated draft" that had
+   * generated nothing: a title of "New Assignment" over three invented tasks
+   * about "the assigned reading", under a blocking "Due date is required".
+   * An instructor who did not know details could be typed inline had no way
+   * forward from there except back to Describe. */
+  describe("a request that never said what the assignment is about", () => {
+    it("opens on Describe rather than a review of nothing", () => {
+      renderPage({
+        aiAssignmentDraft: { courseId: 42, name: "", description: "" },
+      });
+
+      expect(screen.getByText("Describe Your Assignment")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Assignment title")).not.toBeInTheDocument();
+    });
+
+    it("names the details it did resolve so they don't look discarded", () => {
+      renderPage({
+        aiAssignmentDraft: {
+          courseId: 42,
+          name: "",
+          description: "",
+          dueDate: "2026-12-15T23:59",
+          pointsPossible: 20,
+        },
+      });
+
+      expect(
+        screen.getByText(/Please describe your assignment\. Already provided:/),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/^Points: 20$/)).toBeInTheDocument();
+      expect(screen.getByText(/^Due date: /)).toBeInTheDocument();
+    });
+
+    it("says nothing when there was nothing to carry over", () => {
+      renderPage({
+        aiAssignmentDraft: { courseId: 42, name: "", description: "" },
+      });
+
+      expect(
+        screen.queryByText(/Already provided:/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("keeps those details through generating", async () => {
+      const user = userEvent.setup();
+      // The generator answers the description prompt and was never told about
+      // a due date or a point value, so it returns none.
+      mockedGenerate.mockResolvedValue({
+        name: "Sorting Algorithms",
+        description: "Implement and compare three sorting algorithms.",
+        dueDate: "",
+        pointsPossible: null,
+      });
+
+      renderPage({
+        aiAssignmentDraft: {
+          courseId: 42,
+          name: "",
+          description: "",
+          dueDate: "2026-12-15T23:59",
+          pointsPossible: 20,
+        },
+      });
+
+      await user.type(
+        screen.getByLabelText("Assignment Prompt"),
+        "An assignment about sorting algorithms",
+      );
+      await user.click(screen.getByRole("button", { name: "Generate Assignment" }));
+
+      expect(await screen.findByLabelText("Assignment title")).toHaveValue(
+        "Sorting Algorithms",
+      );
+      expect(screen.getByLabelText(/Due date/)).toHaveValue("2026-12-15T23:59");
+      expect(screen.getByLabelText(/Points possible/)).toHaveValue(20);
+    });
+
+    it("lets a generated value win over the carried-over one", async () => {
+      const user = userEvent.setup();
+      mockedGenerate.mockResolvedValue({
+        name: "Sorting Algorithms",
+        description: "Implement and compare three sorting algorithms.",
+        dueDate: "2027-01-20T17:00",
+        pointsPossible: 75,
+      });
+
+      renderPage({
+        aiAssignmentDraft: {
+          courseId: 42,
+          name: "",
+          description: "",
+          dueDate: "2026-12-15T23:59",
+          pointsPossible: 20,
+        },
+      });
+
+      await user.type(
+        screen.getByLabelText("Assignment Prompt"),
+        "An assignment about sorting, due January 20th, worth 75",
+      );
+      await user.click(screen.getByRole("button", { name: "Generate Assignment" }));
+
+      await screen.findByLabelText("Assignment title");
+      expect(screen.getByLabelText(/Due date/)).toHaveValue("2027-01-20T17:00");
+      expect(screen.getByLabelText(/Points possible/)).toHaveValue(75);
+    });
+  });
 });

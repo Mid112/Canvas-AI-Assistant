@@ -25,6 +25,7 @@ from app.mcp_tools.dispatcher import _resolve_course as resolve_course
 from app.mcp_tools.schemas import (
     ACTION_SCHEMAS,
     FORM_HANDOFF_ACTIONS,
+    FORM_OWNED_FIELDS,
     READ_ACTIONS,
     WRITE_ACTIONS,
     AnalyzeCourseSubmissionsAction,
@@ -1104,29 +1105,23 @@ def _inject_course_into_envelope(parsed_envelope: dict, local_course_id: int | N
     return parsed_envelope
 
 
-# The fields a form-handoff write owns outright: the app drafts them from the
-# instructor's own sentence, and the page that opens shows every one of them
-# filled in and editable before anything reaches Canvas. A clarify that asks
-# only for these is asking for something it is about to be handed for free.
+# The fields a clarify may never be the only thing asking for: the app drafts
+# them from the instructor's own sentence, and the page that opens shows every
+# one filled in and editable before anything reaches Canvas. Asking for one is
+# asking for something we are about to hand over for free.
 #
-# Identity is deliberately absent — course, student, assignment, recipients.
-# Those are not content: nothing can write them from the request, and getting
-# one wrong sends a real message to the wrong people. Asking there is right,
-# and this rewrite must never suppress it.
-_FORM_OWNED_FIELDS = frozenset(
-    {
-        "subject",
-        "body",
-        "title",
-        "description",
-        "due_date",
-        "due_at",
-        "points_possible",
-        "time_limit",
-        "allowed_attempts",
-        "new_grade",
-    }
-)
+# Derived from FORM_OWNED_FIELDS rather than restated, so "what a form owns"
+# is declared once and the schema contract and this rewrite cannot drift into
+# disagreeing about it.
+#
+# feedback is the one deliberate subtraction. "Give Sam some feedback" is
+# genuinely ambiguous between an assignment comment and a private message, and
+# that question is about which channel the instructor means, not about content
+# we could have written for them. Identity fields — course, student,
+# assignment, recipients — were never in the set at all: nothing can write
+# those from the request, and getting one wrong sends real mail to the wrong
+# people.
+_CONTENT_CLARIFY_FIELDS = FORM_OWNED_FIELDS - {"feedback"}
 
 
 def _content_only_clarify_fields(question: str) -> set[str] | None:
@@ -1137,12 +1132,12 @@ def _content_only_clarify_fields(question: str) -> set[str] | None:
     question we cannot read exactly is not one to rewrite a turn over, and the
     fallback is the instructor being asked — the behaviour we are improving
     on, not a failure. None whenever any token is unreadable or names
-    something outside _FORM_OWNED_FIELDS, so "subject, recipients" still asks.
+    something outside _CONTENT_CLARIFY_FIELDS, so "subject, recipients" still asks.
     """
     tokens = [part.strip().strip(".!?").lower() for part in question.split(",")]
     if not all(tokens):
         return None
-    if not all(token in _FORM_OWNED_FIELDS for token in tokens):
+    if not all(token in _CONTENT_CLARIFY_FIELDS for token in tokens):
         return None
     return set(tokens)
 
@@ -4484,13 +4479,12 @@ def _rebuild_with(action: Any, proposed: dict) -> Any:
     if action.action == "intent_preview":
         return action.model_copy(update={"proposed_action": proposed})
     # model_copy rather than a re-parse, so filling a gap can never be the
-    # thing that fails the turn. CreateQuizAction.description carries
-    # min_length=20, and a drafter that came back with nineteen useful
-    # characters would raise here and lose a request that was fine before we
-    # tried to improve it. The schema minimums exist to stop the model
-    # emitting a one-word placeholder; the real gate is the validator at
-    # confirm (validate_quiz_for_create / validate_assignment_for_create),
-    # which still runs on whatever the instructor finally approves.
+    # thing that fails the turn. The schemas no longer carry content minimums
+    # that could raise here (see FORM_OWNED_FIELDS), but re-validating an
+    # action that already parsed to improve it is a risk taken for nothing:
+    # the real gate is the validator at confirm — validate_quiz_for_create /
+    # validate_assignment_for_create — which runs on whatever the instructor
+    # finally approves rather than on an intermediate draft.
     return action.model_copy(update=proposed)
 
 

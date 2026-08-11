@@ -192,7 +192,7 @@ def test_field_lists_are_read_and_prose_is_not():
 def test_identity_fields_are_never_form_owned():
     """The rewrite must never suppress a question about who or what is being
     written to — only about the words being written."""
-    from app.services.chat import _FORM_OWNED_FIELDS
+    from app.services.chat import _CONTENT_CLARIFY_FIELDS
 
     for field in (
         "course_name",
@@ -202,7 +202,30 @@ def test_identity_fields_are_never_form_owned():
         "recipient_handle",
         "broadcast_to_all_students",
     ):
-        assert field not in _FORM_OWNED_FIELDS
+        assert field not in _CONTENT_CLARIFY_FIELDS
+
+
+def test_the_two_field_sets_are_one_set():
+    """schemas declares what a form owns; chat subtracts exactly one field
+    from it. Restating the list in both places is how they drift into
+    disagreeing about what a write needs."""
+    from app.mcp_tools.schemas import FORM_OWNED_FIELDS
+    from app.services.chat import _CONTENT_CLARIFY_FIELDS
+
+    assert FORM_OWNED_FIELDS - _CONTENT_CLARIFY_FIELDS == {"feedback"}
+
+
+def test_a_feedback_channel_question_is_still_asked():
+    """"Give Sam some feedback" is ambiguous between an assignment comment and
+    a private message. That question is about which channel, not about content
+    we could have written, so it survives the rewrite."""
+    envelope = {
+        "action": "clarify",
+        "question": "feedback",
+        "partial_plan": {"student_reference": "Sam"},
+    }
+
+    assert _rewrite_content_only_clarify(dict(envelope)) == envelope
 
 
 def test_subject_and_body_identify_a_message():

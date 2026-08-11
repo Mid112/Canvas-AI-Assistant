@@ -5,6 +5,18 @@ from typing import Any, Literal
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 
+def _blank_if_none(value: object) -> object:
+    """Absent content reads as "", never as a validation failure.
+
+    A model leaving out an optional field commonly emits null rather than
+    omitting the key. Rejecting that would put a Pydantic traceback in the
+    chat window over a field the form was always going to collect, so the
+    two spellings of "I don't have this" are made to mean the same thing.
+    Non-null values pass straight through to the real validators.
+    """
+    return "" if value is None else value
+
+
 def _normalize_due_date_str(value: str) -> str:
     """Strip whitespace; instructor-timezone normalization happens at execution."""
     return value.strip()
@@ -241,12 +253,21 @@ class CreateAssignmentAction(BaseModel):
     # local DB course ID — dispatcher resolves canvas_course_id and
     # canvas_url from this, so the LLM never has to know either value
     local_course_id: int
-    title: str
-    description: str
+    # Content fields default to blank — see FORM_OWNED_FIELDS. A gap here is
+    # a field the drafter writes or the form collects, not a malformed
+    # response, and validate_assignment_for_create still refuses an empty one
+    # at confirm with a message an instructor can act on.
+    title: str = ""
+    description: str = ""
     # ISO 8601 string, e.g. "2026-09-01T23:59:00" — validated by
     # validate_assignment_for_create before any Canvas call is made
-    due_date: str
+    due_date: str = ""
     points_possible: float | None = None
+
+    @field_validator("title", "description", "due_date", mode="before")
+    @classmethod
+    def _absent_content_is_blank(cls, value: object) -> object:
+        return _blank_if_none(value)
 
     @field_validator("due_date")
     @classmethod
@@ -277,15 +298,29 @@ class QuizQuestionBankGroupSpec(BaseModel):
 class CreateQuizAction(BaseModel):
     action: Literal["create_quiz"] = "create_quiz"
     local_course_id: int
-    title: str
-    description: str = Field(min_length=20)
-    due_date: str
+    # Blank-by-default for the same reason as CreateAssignmentAction above.
+    #
+    # description previously carried min_length=20, meant to stop the model
+    # emitting a one-word placeholder. It could not tell a placeholder from an
+    # absent field, so it also rejected the empty description a quiz is
+    # supposed to arrive with under FORM HANDOFF — and rejected it as a parse
+    # failure, which surfaces as a raw traceback rather than a question.
+    # validate_quiz_for_create runs _check_description at confirm and is the
+    # check that actually protects the quiz.
+    title: str = ""
+    description: str = ""
+    due_date: str = ""
     points_possible: float | None = None
     allowed_attempts: int | None = 1
     time_limit: int | None = None
     quiz_engine: Literal["classic", "new_quizzes"] = "classic"
     questions: list[QuizQuestionSpec] | None = None
     question_bank_groups: list[QuizQuestionBankGroupSpec] | None = None
+
+    @field_validator("title", "description", "due_date", mode="before")
+    @classmethod
+    def _absent_content_is_blank(cls, value: object) -> object:
+        return _blank_if_none(value)
 
     @field_validator("due_date")
     @classmethod
@@ -345,7 +380,22 @@ class UpdateGradeAction(BaseModel):
     # never rebuild the group out of the result's "sample" names, which is a
     # truncated preview rather than the full set.
     recipient_handle: str | None = None
-    new_grade: str
+    # Optional because feedback without a grade is a real, already-supported
+    # write: grade_management calls it feedback_only, GradeUpdateRequest
+    # defaults posted_grade to "", and the dispatcher builds changed_fields
+    # from whichever of grade/feedback is actually present. The whole path
+    # handled it; only this field refused to validate.
+    #
+    # That made "instead of a message, give them that feedback" fail with a
+    # raw Pydantic error in the chat window, and it was a contradiction we
+    # wrote ourselves: UPDATE_GRADE HANDOFF instructs the model to leave
+    # new_grade out rather than invent a mark, which is exactly right — a
+    # guessed number here is a real mark on a real student's record — and
+    # then the schema rejected the model for complying.
+    #
+    # See FORM_HANDOFF_ACTIONS: the grading form is where a grade gets typed,
+    # against the submission the instructor is actually looking at.
+    new_grade: str = ""
     # `reason` is the deprecated spelling of this field. It stays accepted here
     # — and only here — because the model still occasionally emits it from
     # older prompt phrasings, and dropping an incoming value would silently
@@ -358,6 +408,11 @@ class UpdateGradeAction(BaseModel):
     @field_validator("new_grade", mode="before")
     @classmethod
     def _normalize_grade(cls, value: object) -> str:
+        # None becomes "", not "None". A model that omits an optional field
+        # often emits null instead, and str(None) would put the four-character
+        # string "None" into a field that goes to Canvas as posted_grade.
+        if value is None:
+            return ""
         return str(value).strip()
 
 
@@ -682,4 +737,35 @@ READ_ACTIONS = frozenset(
 # present; the chat clarify only ever guessed at it earlier and less well.
 FORM_HANDOFF_ACTIONS = frozenset(
     {"create_assignment", "create_quiz", "send_message", "update_grade"}
+)
+
+# The fields those forms own — the content the instructor writes, edits or
+# types on the page that opens, rather than the identity of what is being
+# written to.
+#
+# The contract, enforced by test_form_handoff_schema_contract: none of these
+# may be a REQUIRED field on a form-handoff action's schema. Requiring one
+# re-creates the interrogation at the schema layer, and worse, it makes the
+# prompt and the schema disagree — we told the model to omit new_grade rather
+# than invent a mark, then rejected its response for doing so, and the
+# instructor got a raw Pydantic traceback in the chat window.
+#
+# Identity fields are deliberately absent and stay required: local_course_id
+# is what a write is aimed at, and nothing can draft it. This is the same
+# split _FORM_OWNED_FIELDS makes in chat.py, for the same reason — content
+# can be written from the request, identity cannot.
+FORM_OWNED_FIELDS = frozenset(
+    {
+        "subject",
+        "body",
+        "title",
+        "description",
+        "due_date",
+        "due_at",
+        "points_possible",
+        "time_limit",
+        "allowed_attempts",
+        "new_grade",
+        "feedback",
+    }
 )

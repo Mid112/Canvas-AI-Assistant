@@ -37,6 +37,11 @@ interface AssignmentDescribeStepProps {
   /** Offered when the prompt reads like a quiz. The page owns navigation; this
    * step only decides when to surface the option. Omit to suppress it. */
   onSwitchToQuiz?: (prompt: string) => void;
+  /** Details the assistant already resolved from a request that never said
+   * what the assignment was about — "create an assignment worth 20 points".
+   * Shown so the instructor can see they were kept rather than wondering
+   * whether re-describing loses them. Empty or omitted renders nothing. */
+  carriedOverDetails?: Array<{ label: string; value: string }>;
 }
 
 const selectClassName = cn(
@@ -55,6 +60,7 @@ export function AssignmentDescribeStep({
   onGenerate,
   onValuesChange,
   onSwitchToQuiz,
+  carriedOverDetails = [],
 }: AssignmentDescribeStepProps) {
   const [quizSuggestionDismissed, setQuizSuggestionDismissed] = useState(false);
   const {
@@ -101,6 +107,32 @@ export function AssignmentDescribeStep({
           Tell the AI what kind of assignment you want to create. Be specific about
           topics, difficulty, and learning objectives.
         </p>
+        {/* An assistant request can resolve a due date or a point value while
+            saying nothing about the subject — "create an assignment worth 20
+            points". Those are decisions the instructor made, so they are named
+            here rather than silently held: without this the step looks like a
+            blank start and re-describing feels like it discards them. */}
+        {carriedOverDetails.length > 0 ? (
+          <div
+            role="status"
+            className="mt-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm"
+          >
+            <p className="font-medium">
+              Please describe your assignment. Already provided:
+            </p>
+            <ul className="mt-1 space-y-0.5 text-muted-foreground">
+              {carriedOverDetails.map((detail) => (
+                <li key={detail.label}>
+                  {detail.label}: {detail.value}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-muted-foreground">
+              These are kept when you generate. You can change them on the next
+              step.
+            </p>
+          </div>
+        ) : null}
       </CardHeader>
       <form onSubmit={handleSubmit(onGenerate)} noValidate>
         <CardContent className="space-y-5">

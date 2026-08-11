@@ -110,10 +110,14 @@ async def test_a_complete_request_costs_no_model_call():
 
 @pytest.mark.asyncio
 async def test_quizzes_are_drafted_the_same_way():
-    """Through intent_preview, which is both what the system prompt asks for
-    and the only route a gap-bearing quiz can take: CreateQuizAction pins
-    description at min_length=20, so an empty one cannot be constructed as a
-    typed action at all."""
+    """Through intent_preview, which is what the system prompt asks for.
+
+    This used to be the *only* route a gap-bearing quiz could take, because
+    CreateQuizAction pinned description at min_length=20 and an empty one
+    could not be constructed as a typed action at all. That minimum is gone —
+    see test_form_handoff_schema_contract for why a form-owned field must not
+    be required — so the bare action works too, and this covers the wrapped
+    route the model actually emits."""
     action = IntentPreviewAction(
         summary="I'll create the quiz.",
         proposed_action={
@@ -135,8 +139,9 @@ async def test_quizzes_are_drafted_the_same_way():
 
 @pytest.mark.asyncio
 async def test_a_short_draft_never_fails_the_turn():
-    """A re-parse here would raise on CreateQuizAction's min_length and lose
-    a request that was fine before we tried to improve it."""
+    """Filling a gap must never be the thing that breaks the turn — whatever
+    the drafter returns, the request survives at least as intact as it
+    arrived."""
     action = CreateQuizAction(
         local_course_id=1,
         title="",
@@ -184,6 +189,64 @@ async def test_a_failed_drafter_leaves_the_request_intact():
 
     assert filled.title == "HW1"
     assert filled.description == ""
+
+
+@pytest.mark.asyncio
+async def test_a_request_with_no_subject_matter_drafts_nothing():
+    """"can you create an assignment?" — there is nothing in it to write from.
+
+    The drafter answered it with a title of "New Assignment" over three
+    invented tasks about "the assigned reading", and that reached the preview
+    looking like a finished draft of an assignment nobody had described. An
+    empty draft is the correct answer: it lands the instructor on the
+    describe step, which is where a request with no description belongs.
+    """
+    action = CreateAssignmentAction(local_course_id=1)
+    adapter = _drafting_adapter("", "")
+
+    filled = await _ensure_write_content_is_drafted(
+        action, "can you create an assignment?", adapter
+    )
+
+    assert filled.title == ""
+    assert filled.description == ""
+
+
+def test_the_chat_drafter_is_told_to_return_nothing_rather_than_invent():
+    """The describe step and a chat turn have different contracts, and the
+    difference only shows on an empty request: the describe step is reached by
+    an instructor who typed a description, so returning nothing there would be
+    a broken feature."""
+    from app.services.assignment_draft import (
+        ASSIGNMENT_DRAFT_SYSTEM_PROMPT,
+        CHAT_ASSIGNMENT_DRAFT_SYSTEM_PROMPT,
+    )
+    from app.services.quiz_draft import CHAT_QUIZ_DRAFT_SYSTEM_PROMPT
+
+    for prompt in (
+        CHAT_ASSIGNMENT_DRAFT_SYSTEM_PROMPT,
+        CHAT_QUIZ_DRAFT_SYSTEM_PROMPT,
+    ):
+        assert '"title": ""' in prompt
+        assert "Do not invent" in prompt
+
+    # The describe step's own prompt is deliberately left without the guard.
+    assert "Do not invent a topic" not in ASSIGNMENT_DRAFT_SYSTEM_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_a_blank_assignment_previews_without_an_empty_quoted_title():
+    """params.get("title", "Untitled") only defaults on an absent key, so a
+    present-but-blank title rendered as "Create assignment '' in ..."."""
+    from types import SimpleNamespace
+
+    from app.services.write_preview import _preview_create_assignment
+
+    course = SimpleNamespace(id=1, name="Capstone Project")
+    preview = _preview_create_assignment(course, {"title": "", "description": ""})
+
+    assert "''" not in preview["summary"]
+    assert preview["metadata"]["title"] == "Untitled"
 
 
 @pytest.mark.asyncio

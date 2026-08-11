@@ -47,6 +47,34 @@ ASSIGNMENT_DRAFT_SYSTEM_PROMPT = (
     "Never invent a default point value such as 10 or 100."
 )
 
+# The describe step and a chat turn ask for different things, and the
+# difference only shows up on an empty request.
+#
+# The describe step is reached by an instructor who typed a description and
+# pressed a button: there is always something to work from, and returning
+# nothing would be a broken feature. A chat turn can carry no subject matter
+# at all — "can you create an assignment?" — and the shared prompt above,
+# having never been told otherwise, answered it with a title of "New
+# Assignment" over three invented tasks about "the assigned reading". That
+# reached the preview looking like a finished draft of an assignment nobody
+# had described.
+#
+# So: produce nothing rather than something fake. An empty draft lands the
+# instructor on the describe step, which is where a request with no
+# description belongs.
+_NOTHING_TO_DRAFT_FROM = (
+    "If the request does not say what the assignment is about — "
+    '"create an assignment" and nothing more — return {"title": "", '
+    '"description": ""}. Do not invent a topic, a placeholder title such as '
+    '"New Assignment", or filler tasks such as "review the assigned reading". '
+    "Returning empty is correct and expected here; a made-up draft is not, "
+    "because it looks finished and gets published."
+)
+
+CHAT_ASSIGNMENT_DRAFT_SYSTEM_PROMPT = (
+    f"{ASSIGNMENT_DRAFT_SYSTEM_PROMPT} {_NOTHING_TO_DRAFT_FROM}"
+)
+
 
 async def draft_assignment_content(prompt: str, *, adapter: Any) -> tuple[str, str]:
     """A title and description written from the instructor's own words.
@@ -62,14 +90,15 @@ async def draft_assignment_content(prompt: str, *, adapter: Any) -> tuple[str, s
     the date, and that decision is exactly what a field-by-field question
     cannot make.
 
-    Never raises, and never fabricates: on any failure both values come back
-    empty and the caller keeps whatever it already had. An assignment with a
-    thin description is a nuisance the instructor fixes in the form; an
-    assignment whose description was invented wholesale is worse, because it
-    looks finished.
+    Never raises, and never fabricates: on any failure — and on a request
+    that names no subject matter at all — both values come back empty and the
+    caller keeps whatever it already had. An assignment with a thin
+    description is a nuisance the instructor fixes in the form; an assignment
+    whose description was invented wholesale is worse, because it looks
+    finished.
     """
     try:
-        raw = await adapter.generate(ASSIGNMENT_DRAFT_SYSTEM_PROMPT, prompt)
+        raw = await adapter.generate(CHAT_ASSIGNMENT_DRAFT_SYSTEM_PROMPT, prompt)
         data = loads_llm_json(raw)
     except Exception:
         return "", ""
