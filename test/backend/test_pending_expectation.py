@@ -309,11 +309,20 @@ def test_clarify_retries_are_capped_and_then_reach_the_instructor(client):
         )
 
     assert body["reply"].get("clarify") is True, body
-    # Three passes — the initial one plus two retries — each costing a main
-    # call and one _resolve_assignment_reference call. Pinned as a number
-    # because the cap is the whole point: without it this turn would keep
-    # going to MAX_TURN_STEPS.
-    assert mock_adapter.generate.await_count == 6
+    # Four calls, pinned as a number because the cap is the whole point:
+    # without it this turn would keep going to MAX_TURN_STEPS.
+    #
+    # It used to be six — three passes at a main call plus one
+    # _resolve_assignment_reference call each. The model here returns the
+    # byte-identical action every time, so the in-turn dedupe now serves the
+    # second and third passes from the result already in hand instead of
+    # re-running the resolver, and the third repeat ends the turn. Same
+    # clarify reaches the instructor, two fewer calls to get there.
+    #
+    # The retry budget still does its job for what it is actually for: a model
+    # that goes back and calls a DIFFERENT tool has a different signature, so
+    # dedupe never fires (see the test above, still three calls).
+    assert mock_adapter.generate.await_count == 4
 
 
 # Verifies a missing-field clarify is still terminal. It has no candidates

@@ -106,6 +106,10 @@ from app.services.llm.student_context import (
     llm_student_candidates,
 )
 from app.services.quiz_validation import validate_quiz_for_create
+from app.services.reference_resolution import (
+    ReferenceKind,
+    find_reference_across_courses,
+)
 from app.services.resolved_set import (
     active_roster_names,
     compute_submissions_by_score_range,
@@ -1635,6 +1639,67 @@ async def _find_assignment_in_other_courses(
 COURSE_SWITCH_EXPECTATION_FIELD = "course_switch"
 
 
+def build_switch_offer(
+    *,
+    question: str,
+    targets: list[tuple[int, str]],
+    reference: str | None,
+    user_message: str,
+) -> dict | None:
+    """The one shape a course-switch offer has, whatever noticed it.
+
+    Three different situations produce this — a named assignment that isn't
+    here, a filter that matched nobody here, a reference that scores better in
+    another course — and they differ only in the sentence. The candidate list,
+    the expectation field the next turn reads the answer against, and the
+    payload that carries the interrupted work all have to be identical, or
+    accepting the offer works after one of them and silently does nothing
+    after another. That is exactly how send_message ended up as the workflow
+    where "yes" dropped the request: it never called any of this, so the model
+    improvised a switch question with no payload behind it.
+
+    ``targets`` is [(local_course_id, course_name)], best first. A single
+    target puts its id in the payload so a bare "yes" is a complete answer;
+    with several, the reply has to name one and that choice supplies the id.
+
+    Returns None when there is nothing to offer, so callers keep their own
+    ordinary wording for "genuinely not found".
+    """
+    if not targets:
+        return None
+    return {
+        "action": "clarify",
+        "clarify": True,
+        "question": question,
+        "partial_plan": {"assignment_reference": reference},
+        "clarify_field": COURSE_SWITCH_EXPECTATION_FIELD,
+        "clarify_candidates": [
+            {"id": course_id, "label": course_name} for course_id, course_name in targets
+        ],
+        # The interrupted request travels with the offer, so a bare "yes"
+        # switches AND carries on. handle_chat_message adds the parsed action
+        # to this on the way out (see _with_pending_action).
+        "clarify_payload": {
+            "user_message": user_message,
+            "assignment_reference": reference,
+            "local_course_id": targets[0][0] if len(targets) == 1 else None,
+            "course_name": targets[0][1] if len(targets) == 1 else None,
+        },
+    }
+
+
+def _dedupe_targets(elsewhere: list[tuple[int, str, str]]) -> list[tuple[int, str]]:
+    """(course_id, course_name), first occurrence wins, order preserved."""
+    seen: set[int] = set()
+    targets: list[tuple[int, str]] = []
+    for course_id, course_name, _label in elsewhere:
+        if course_id in seen:
+            continue
+        seen.add(course_id)
+        targets.append((course_id, course_name))
+    return targets
+
+
 def _empty_filter_switch_offer(
     course: Course,
     assignment_name: str,
@@ -1645,16 +1710,11 @@ def _empty_filter_switch_offer(
     """Offer a course switch when a filter matched nobody here but the same
     assignment name exists elsewhere.
 
-    Only offered when the peek is cheap and the evidence is real. "No students
-    matched" is usually a true answer about the right course — everyone
-    submitted, nobody scored in that band — and turning every empty result
-    into "did you mean another course?" would be noise on the common case.
-    What makes it worth raising is the *assignment name existing in another
-    course*, which is the same signal the unresolvable-assignment path uses,
-    and which is answered from local rows without touching Canvas.
-
-    Returns None when there is nothing to suggest, so the caller keeps its
-    ordinary empty-result wording.
+    Only offered when the evidence is real. "No students matched" is usually a
+    true answer about the right course — everyone submitted, nobody scored in
+    that band — and turning every empty result into "did you mean another
+    course?" would be noise on the common case. What makes it worth raising is
+    the *assignment name existing in another course*.
     """
     if not elsewhere:
         return None
@@ -1672,23 +1732,161 @@ def _empty_filter_switch_offer(
             f"An assignment with that name also exists in: {options}. "
             "Which course did you mean?"
         )
-    return {
-        "action": "clarify",
-        "clarify": True,
-        "question": question,
-        "partial_plan": {"assignment_reference": assignment_name},
-        "clarify_field": COURSE_SWITCH_EXPECTATION_FIELD,
-        "clarify_candidates": [
-            {"id": course_id, "label": course_name}
-            for course_id, course_name, _ in elsewhere
-        ],
-        "clarify_payload": {
-            "user_message": user_message,
-            "assignment_reference": assignment_name,
-            "local_course_id": elsewhere[0][0] if len(elsewhere) == 1 else None,
-            "course_name": elsewhere[0][1] if len(elsewhere) == 1 else None,
-        },
+    return build_switch_offer(
+        question=question,
+        targets=_dedupe_targets(elsewhere),
+        reference=assignment_name,
+        user_message=user_message,
+    )
+
+
+#: What each kind of reference is called in the offer sentence.
+_REFERENCE_NOUNS: dict[ReferenceKind, str] = {
+    "assignment": "assignment",
+    "student": "student",
+}
+
+
+async def cross_course_switch_offer(
+    db: AsyncSession,
+    user: User,
+    *,
+    kind: ReferenceKind,
+    reference: str | None,
+    course: Course,
+    user_message: str,
+) -> dict | None:
+    """"You are in the wrong course" — decided once, for every workflow.
+
+    Called before a chain commits to resolving inside the conversation's
+    course. That ordering is the fix: resolution used to start here and only
+    look elsewhere once it had failed outright, which let a weak local match
+    win by default. An instructor in Capstone Project asking for the due date
+    of "homework 1 limits" got Capstone's "Homework 1", because Capstone had
+    *something* plausible and Math 101's exact match was never consulted.
+
+    Only fires when another course is plainly better — see
+    ReferenceCandidates.elsewhere_is_better, which requires both real
+    confidence and a clear margin, so a tie leaves the instructor where they
+    are. Returns None otherwise, and the caller proceeds exactly as before.
+    """
+    if not reference:
+        return None
+    candidates = await find_reference_across_courses(
+        db, user, kind=kind, reference=reference, current_course_id=course.id
+    )
+    if not candidates.elsewhere_is_better:
+        return None
+
+    targets = candidates.switch_targets
+    noun = _REFERENCE_NOUNS[kind]
+    best = targets[0]
+    here = candidates.best_here
+    # Naming the near-miss matters: without it the offer reads as "that does
+    # not exist here", which is false and looks like a bug to someone staring
+    # at an assignment list that plainly contains something similar.
+    local_note = (
+        f' The closest thing in {course.name} is "{here.label}".' if here else ""
+    )
+    if len(targets) == 1:
+        question = (
+            f'"{reference}" looks like the {noun} "{best.label}" in '
+            f"{best.course_name}, not {course.name}.{local_note} "
+            "Should I switch to it and continue there?"
+        )
+    else:
+        options = ", ".join(match.course_name for match in targets)
+        question = (
+            f'"{reference}" matches a {noun} in: {options} — not '
+            f"{course.name}.{local_note} Which course did you mean?"
+        )
+    return build_switch_offer(
+        question=question,
+        targets=[(match.local_course_id, match.course_name) for match in targets],
+        reference=reference,
+        user_message=user_message,
+    )
+
+
+# Fields on a stored action that name a *thing inside a course* — a Canvas id
+# the app resolved, or a set it computed. None of them survive a move to a
+# different course: assignment 4821 is not in the course being switched to,
+# and a recipient handle was scoped to a roster that is no longer the roster.
+#
+# Everything NOT listed here is the instructor's own intent and content — the
+# message body, the subject, the grade, the due date, the words they used to
+# name an assignment — and all of it is kept. That split is the whole point:
+# replaying the raw sentence through the model re-derives the intent and can
+# land somewhere else, which is how "send messages to students who submitted
+# testing event 2 saying they did well" came back, after the switch, as a
+# submissions report with the message body gone.
+_COURSE_SCOPED_ACTION_FIELDS = frozenset(
+    {
+        "assignment_id",
+        "quiz_id",
+        "student_id",
+        "recipient_handle",
+        "recipient_canvas_user_ids",
+        "recipient_names",
+        "student_grades",
     }
+)
+
+
+@dataclass(frozen=True)
+class SwitchOutcome:
+    """What answering a course-switch offer decided.
+
+    A dataclass rather than a tuple because the shape kept growing and the
+    unpacking at the call site stopped saying what each slot meant.
+    """
+
+    #: A reply that ends the turn — the instructor declined, or the offer was
+    #: no longer usable. None means the turn carries on in ``conversation``.
+    terminal: dict | None
+    #: The interrupted request, in the instructor's own words. Used when there
+    #: is no storable action to resume.
+    replay_message: str
+    #: Where the turn continues. The source conversation on a decline.
+    conversation: Conversation
+    #: The interrupted action, rebased onto the course being entered. Resuming
+    #: this rather than re-reading ``replay_message`` is what stops a write
+    #: from being re-planned into something else on the way across.
+    pending_action: dict | None = None
+
+
+def _with_pending_action(payload: dict | None, action: Any) -> dict | None:
+    """Attach the action a course-switch offer interrupted, so accepting the
+    offer resumes the work instead of re-asking the model what the work was.
+
+    Only for the switch offer — every other clarify already carries what it
+    needs in ``partial_plan``, and storing a whole action on them would put
+    model-authored fields into conversation memory for no gain.
+    """
+    if payload is None or action is None:
+        return payload
+    try:
+        dumped = action.model_dump(exclude_none=True)
+    except Exception:
+        return payload
+    return {**payload, "pending_action": dumped}
+
+
+def rebase_pending_action(pending_action: dict | None, course_id: int) -> dict | None:
+    """Point a stored action at a different course, dropping what cannot follow.
+
+    Returns None when there is nothing worth resuming, so the caller falls back
+    to replaying the instructor's sentence through the model.
+    """
+    if not isinstance(pending_action, dict) or not pending_action.get("action"):
+        return None
+    rebased = {
+        key: value
+        for key, value in pending_action.items()
+        if key not in _COURSE_SCOPED_ACTION_FIELDS
+    }
+    rebased["local_course_id"] = course_id
+    return rebased
 
 
 _SWITCH_CONFIRMATION_RESOLVER_SYSTEM_PROMPT = """You decide whether an
@@ -1811,7 +2009,7 @@ async def _apply_pending_course_switch(
     conversation: Conversation,
     message: str,
     adapter: LLMAdapter | None,
-) -> tuple[dict | None, str, Conversation] | None:
+) -> SwitchOutcome | None:
     """Read a reply to a pending "switch to <course>?" offer.
 
     Returns None when there is no such offer or the reply isn't an answer to
@@ -1877,31 +2075,31 @@ async def _apply_pending_course_switch(
     clear_pending_expectation(conversation)
 
     if not answer:
-        return (
-            {
+        return SwitchOutcome(
+            terminal={
                 "action": "respond",
                 "message": (
                     f"Staying in {conversation.course_name or 'this course'}. "
                     "Let me know what you'd like to do here instead."
                 ),
             },
-            message,
-            conversation,
+            replay_message=message,
+            conversation=conversation,
         )
 
     if target_course_id is None or not original_message:
         # The offer is unusable without both halves; say so rather than
         # switching to nothing or switching and then doing nothing.
-        return (
-            {
+        return SwitchOutcome(
+            terminal={
                 "action": "respond",
                 "message": (
                     "I've lost track of which course that referred to — could "
                     "you say the course and what you'd like me to do?"
                 ),
             },
-            message,
-            conversation,
+            replay_message=message,
+            conversation=conversation,
         )
 
     target = await db.get(Course, target_course_id)
@@ -1909,13 +2107,13 @@ async def _apply_pending_course_switch(
         # Ownership is re-checked at use, not trusted from stored memory —
         # field_memory is per conversation, but a course id read back out of
         # it must still belong to this instructor before anything is done in it.
-        return (
-            {
+        return SwitchOutcome(
+            terminal={
                 "action": "respond",
                 "message": "That course is no longer available on your account.",
             },
-            message,
-            conversation,
+            replay_message=message,
+            conversation=conversation,
         )
 
     # Route to that course's own conversation rather than re-pointing this one.
@@ -1955,7 +2153,14 @@ async def _apply_pending_course_switch(
         ),
     )
     print(f"Switched to {course_label}; continuing the original request")
-    return None, original_message, target_conversation
+    return SwitchOutcome(
+        terminal=None,
+        replay_message=original_message,
+        conversation=target_conversation,
+        # Rebased onto the course being entered: the intent and the content
+        # travel, the old course's resolved ids do not.
+        pending_action=rebase_pending_action(payload.get("pending_action"), target.id),
+    )
 
 
 def _assignment_elsewhere_clarify(
@@ -1987,27 +2192,12 @@ def _assignment_elsewhere_clarify(
             f"is set to that course. Assignments with that name exist in: "
             f"{options}. Which course did you mean?"
         )
-    return {
-        "action": "clarify",
-        "clarify": True,
-        "question": question,
-        "partial_plan": {"assignment_reference": reference},
-        "clarify_field": COURSE_SWITCH_EXPECTATION_FIELD,
-        "clarify_candidates": [
-            {"id": course_id, "label": course_name}
-            for course_id, course_name, _ in elsewhere
-        ],
-        # The interrupted request travels with the offer, so a bare "yes"
-        # switches AND carries on. Only meaningful when one course owns the
-        # assignment — with several, the reply names which one and that
-        # choice supplies the id instead.
-        "clarify_payload": {
-            "user_message": user_message,
-            "assignment_reference": reference,
-            "local_course_id": elsewhere[0][0] if len(elsewhere) == 1 else None,
-            "course_name": elsewhere[0][1] if len(elsewhere) == 1 else None,
-        },
-    }
+    return build_switch_offer(
+        question=question,
+        targets=_dedupe_targets(elsewhere),
+        reference=reference,
+        user_message=user_message,
+    )
 
 
 async def _resolve_course_and_assignment(
@@ -2107,6 +2297,25 @@ async def _resolve_course_and_assignment(
                 ),
                 "partial_plan": {"local_course_id": course.id},
             }
+
+        # Before resolving inside this course, check whether another one is
+        # plainly a better fit. This runs BEFORE _resolve_assignment_reference,
+        # not after it, and that ordering is the whole point: the in-course
+        # resolver is asked to pick the closest title from a list, so given
+        # "homework 1 limits" and a course containing "Homework 1" it will
+        # happily pick it — and the exact match sitting in another course is
+        # never looked at. Only a clear win elsewhere pre-empts it, so an
+        # ordinary in-course request is untouched.
+        #
+        # Placed after fetch_assignments above so this course's own rows are
+        # freshly synced when they are compared against everyone else's.
+        offer = await cross_course_switch_offer(
+            db, user, kind="assignment", reference=assignment_reference,
+            course=course, user_message=user_message,
+        )
+        if offer is not None:
+            return offer
+
         assignment_id = await _resolve_assignment_reference(
             assignments, assignment_reference, user_message, adapter
         )
@@ -4104,6 +4313,29 @@ async def _run_send_message_chain(
     recipient_canvas_user_ids already known) is unaffected and keeps using
     the existing single-preview auto-wrap path."""
     course = await resolve_course(db, user, action.local_course_id)
+
+    # The same "are we even in the right course?" check the reads already do.
+    # send_message not having one is half the reported bug: with nothing
+    # server-side to raise it, the model improvised its own "should I switch?"
+    # question — one with no candidates and no payload behind it — so
+    # answering "yes please" was read as a brand-new request and came back as
+    # a submissions report with the message body gone.
+    #
+    # Named people, here. An assignment named inside a directive ("everyone
+    # who submitted X") reaches this chain as a recipient_handle from a
+    # resolver that already ran, and that resolver checks the assignment
+    # through the same function via _resolve_course_and_assignment.
+    #
+    # First clear miss wins: messaging the wrong roster cannot be taken back.
+    for directive in action.recipient_directives or []:
+        offer = await cross_course_switch_offer(
+            db, user, kind="student",
+            reference=getattr(directive, "student_reference", None),
+            course=course, user_message=user_message,
+        )
+        if offer is not None:
+            return offer
+
     groups: list[MessageGroup] = []
     roster: list[dict] = []
 
@@ -4274,9 +4506,8 @@ def _build_llm_message(
 
     if loop_steps:
         steps_text = "\n\n".join(
-            f'Step {i + 1} result ({step["action"]}):\n'
-            f'{json.dumps(trim_tool_dump_for_history(step["result"]))}'
-            for i, step in enumerate(loop_steps)
+            f"Step {i + 1} result ({action_name}):\n{json.dumps(result, default=str)}"
+            for i, (action_name, result) in enumerate(_compact_step_results(loop_steps))
         )
         parts.append(
             "You are mid-way through a multi-step turn — the steps below "
@@ -4285,11 +4516,92 @@ def _build_llm_message(
             "results: propose another read/resolver to gather more, a "
             "write (via intent_preview) once you have everything it needs, "
             "or respond/clarify if you're done or stuck. Do not repeat a "
-            "step you already have a result for below.\n\n" + steps_text
+            "step you already have a result for below.\n\n"
+            "If these results already answer the request, reply with "
+            "respond — do not call another tool just to confirm what you "
+            "can already see.\n\n" + steps_text
         )
 
     parts.append(f"User request: {message}")
     return "\n\n".join(parts)
+
+
+def _step_signature(action: Any) -> str | None:
+    """A stable identity for "this exact read, with these exact arguments".
+
+    None for anything that is not a read — a repeated write is a second
+    announcement, not a redundant lookup, and must never be collapsed.
+    """
+    name = getattr(action, "action", None)
+    if name not in READ_ACTIONS:
+        return None
+    try:
+        arguments = action.model_dump(exclude_none=True)
+    except Exception:
+        return None
+    arguments.pop("action", None)
+    return json.dumps({"action": name, "arguments": arguments}, sort_keys=True, default=str)
+
+
+def _repeated_step_result(loop_steps: list[dict], action: Any) -> dict | None:
+    """The stored result when this turn already ran this exact read."""
+    signature = _step_signature(action)
+    if signature is None:
+        return None
+    for step in loop_steps:
+        if step.get("signature") == signature:
+            return step.get("result")
+    return None
+
+
+def _step_signature_count(loop_steps: list[dict], action: Any) -> int:
+    """How many times this turn has already asked for this exact read."""
+    signature = _step_signature(action)
+    if signature is None:
+        return 0
+    return sum(1 for step in loop_steps if step.get("signature") == signature)
+
+
+# Per-step and whole-turn budgets for feeding results back into the next
+# prompt. Larger than trim_tool_dump_for_history's history budget on purpose:
+# history is scrollback the model can mostly ignore, while a step result is
+# the thing it is being asked to reason over right now. Truncating a 27-item
+# assignment list down to a 2500-character preview is how "which of these is
+# due on the 1st" becomes unanswerable one step after being asked.
+#
+# The turn total is what actually protects the context window. Per-step alone
+# would let five steps of 6000 through.
+_STEP_RESULT_CHAR_BUDGET = 6000
+_TURN_RESULT_CHAR_BUDGET = 14000
+
+
+def _compact_step_results(loop_steps: list[dict]) -> list[tuple[str, Any]]:
+    """(action, trimmed result) per step, oldest trimmed hardest.
+
+    Recency wins when the turn total is blown: the newest step is the one the
+    model is reasoning from, and the oldest is usually a lookup whose useful
+    content has already been carried forward into a later step.
+    """
+    trimmed = [
+        (step["action"], trim_tool_dump_for_history(step["result"], max_chars=_STEP_RESULT_CHAR_BUDGET))
+        for step in loop_steps
+    ]
+    total = sum(len(json.dumps(result, default=str)) for _action, result in trimmed)
+    if total <= _TURN_RESULT_CHAR_BUDGET:
+        return trimmed
+
+    # Walk newest-first, spending the budget as we go; whatever is left over
+    # for the older steps is what they get.
+    remaining = _TURN_RESULT_CHAR_BUDGET
+    rebuilt: list[tuple[str, Any]] = []
+    for action_name, result in reversed(trimmed):
+        allowance = max(remaining, 400)
+        rebuilt.append(
+            (action_name, trim_tool_dump_for_history(result, max_chars=allowance))
+        )
+        remaining -= len(json.dumps(rebuilt[-1][1], default=str))
+    rebuilt.reverse()
+    return rebuilt
 
 
 def _plain_text_response(raw_output: str) -> dict | None:
@@ -5055,15 +5367,24 @@ message says “message this student” and more than one recent student could
 match, ask for the student's name and show the available names rather than
 guessing.
 
-MULTI-STEP REQUESTS: some requests need more than one step to satisfy in
-a single message — e.g. "message students missing assignment 4" needs a
-semantic find_missing_submissions intent before send_message can be proposed;
-"push back the last assignment under 30% submissions by 3 days" needs a
-semantic find_assignment_by_rate intent before update_assignment. Propose the
-first semantic step you need; the server runs its read-only implementation
-and the same turn can continue to the requested write or follow-up read.
-Only stop early with clarify/respond if something is genuinely missing or
-ambiguous.
+MULTI-STEP REQUESTS: propose the first step you need, not the whole plan.
+The server runs it and comes back to you with the result, in this same turn,
+as many times as the request needs. ANY read can be a first step:
+
+  "message students missing assignment 4"
+      find_missing_submissions, then send_message with the resolved group
+  "push back the last assignment under 30% submissions by 3 days"
+      find_assignment_by_rate, then update_assignment
+  "what is the due date of homework 1?"
+      fetch_assignments, then respond with that one date
+
+That last one matters: a read is a step toward an answer, not the answer.
+When a question asks for one fact, fetch what you need and then RESPOND with
+the fact — do not leave the raw list as your reply and make the user find it.
+
+Use respond as soon as the results in front of you answer the request, and do
+not re-request something you already have a result for. Stop early with
+clarify only when something is genuinely missing or ambiguous.
 
 CONVERSATION HISTORY:
 Previous messages in this conversation are provided below. If this is
@@ -5457,17 +5778,17 @@ async def handle_chat_message(
     request, so a question like "show me submissions for the latest
     assignment" never needs a second user turn.
 
-    Multi-step turns: an ordinary single read (fetch_assignments,
-    fetch_students, ...) still terminates the turn on its own first
-    result, exactly as always. But a _CHAINABLE_READ_ACTIONS result
-    (resolve_missing_submissions, find_assignment_by_submission_rate) is
-    fed back for another LLM decision within the SAME turn — see the step
-    loop below — bounded by MAX_TURN_STEPS, so e.g. "message students
-    missing assignment 4" can resolve the recipient set AND propose the
-    send_message in one turn instead of needing a follow-up message. Once
-    genuinely mid-chain (past the first step), any further read continues
-    the same way. A modify turn never enters this loop at all — revising
-    an already-proposed write is a single edit, not a multi-step plan.
+    Multi-step turns: ANY read result is fed back for another LLM decision
+    within the SAME turn — see the step loop below — bounded by
+    MAX_TURN_STEPS, so "message students missing assignment 4" resolves the
+    recipient set AND proposes the send_message in one turn, and "what is the
+    due date of homework 1" fetches the assignments and then answers with the
+    one date rather than rendering all of them. Only a write, a clarify, or an
+    explicit respond ends a turn. Repeated identical reads are served from the
+    result already in hand, and a model that asks a third time is answered
+    with it rather than left to exhaust the budget. A modify turn never enters
+    this loop at all — revising an already-proposed write is a single edit,
+    not a multi-step plan.
 
     Course resolution: local_course_id here is only ever an explicit
     client-supplied value (the "set active course" button). Every other
@@ -5569,21 +5890,23 @@ async def handle_chat_message(
     # It sits just below adapter construction only because reading a reply
     # that isn't a literal yes/no needs one (_resolve_switch_confirmation).
     # Nothing between here and there looks at the message.
+    resumed_action: dict | None = None
     switch_reply = await _apply_pending_course_switch(
         db, user, conversation, message, adapter
     )
     if switch_reply is not None:
-        decision, replay_message, switch_conversation = switch_reply
-        if decision is not None:
-            return conversation, decision, False
-        conversation = switch_conversation
-        # Confirmed: the conversation now points at the right course, and the
-        # instructor's ORIGINAL words are replayed through the normal pipeline
-        # rather than re-dispatched by hand. Reusing the real path means the
-        # continued workflow gets the same intent detection, resolvers and
-        # write-preview gating as if they had typed it in the right course to
-        # begin with.
-        message = replay_message
+        if switch_reply.terminal is not None:
+            return conversation, switch_reply.terminal, False
+        resumed_action = switch_reply.pending_action
+        conversation = switch_reply.conversation
+        # The interrupted request continues through the normal pipeline rather
+        # than being re-dispatched by hand, so it gets the same resolvers and
+        # write-preview gating as if it had been typed in the right course to
+        # begin with. What continues is the ACTION when one was stored (see
+        # rebase_pending_action) and the instructor's own words otherwise —
+        # the words alone let the model re-plan, which is how a send_message
+        # came back across the switch as a submissions report.
+        message = switch_reply.replay_message
         # The replayed request is logged as this course's own user message, and
         # the "yes" stays behind in the course it answered a question in.
         #
@@ -5662,6 +5985,11 @@ async def handle_chat_message(
         pending_message_id is None
         and local_course_id is None
         and conversation.course_id is not None
+        # A resumed switch already settled the course, by the instructor
+        # saying yes to it a moment ago. Re-asking a resolver whether the
+        # replayed sentence names a different one can only undo that, and
+        # costs a call to do it.
+        and resumed_action is None
         and (
             history
             or _message_may_name_another_course(
@@ -5768,7 +6096,15 @@ async def handle_chat_message(
     )
     cache_key: str | None = None
     cached_raw_output: str | None = None
-    if llm_config.cache_enabled and is_safe_cache_candidate(
+    if resumed_action is not None:
+        # Step 1 is the action the instructor already approved by accepting the
+        # switch, injected where the model's first reply would go. Everything
+        # downstream — course resolution, the resolver chains, the write
+        # preview gate — then runs exactly as if they had typed the request in
+        # the right course to begin with, which is the whole reason to resume
+        # the action rather than dispatch it by hand.
+        cached_raw_output = json.dumps(resumed_action)
+    elif llm_config.cache_enabled and is_safe_cache_candidate(
         message,
         has_history=bool(history),
         local_course_id=local_course_id,
@@ -6109,6 +6445,30 @@ async def handle_chat_message(
             if limited_reply is not None:
                 return conversation, limited_reply, True
 
+            repeated = _repeated_step_result(loop_steps, action)
+            if repeated is not None:
+                # The model asked for something it already has. Serving the
+                # stored result costs nothing; the alternative is a second
+                # identical Canvas round trip for data already in its prompt.
+                #
+                # Only reads are deduped. A repeated write is not a redundant
+                # lookup — it is a second announcement, a second grade change —
+                # and must reach the preview/confirm gate on its own.
+                result = repeated
+                if _step_signature_count(loop_steps, action) >= 2:
+                    # Asked for the same thing three times: it is not going to
+                    # move on. Ending here with that read's own result is
+                    # exactly what the turn did before reads could chain, so a
+                    # model that cannot use the loop is no worse off for the
+                    # loop existing — and the instructor gets an answer rather
+                    # than fifteen steps of silence and a budget message.
+                    break
+                loop_steps.append(
+                    {"action": action.action, "result": result,
+                     "signature": _step_signature(action)}
+                )
+                continue
+
             if action.action == "fetch_submissions":
                 # Needs a real Canvas assignment_id, which the model is
                 # never allowed to invent — resolve it server-side (chains
@@ -6289,26 +6649,47 @@ async def handle_chat_message(
             and clarify_retries_left > 0
         ):
             clarify_retries_left -= 1
-            loop_steps.append({"action": action.action, "result": result})
+            loop_steps.append(
+                {"action": action.action, "result": result,
+                 "signature": _step_signature(action)}
+            )
             if step >= MAX_TURN_STEPS:
                 result = _step_budget_exhausted_response(loop_steps)
                 break
             continue
 
-        # Otherwise, a _CHAINABLE_READ_ACTIONS result always continues (that's
-        # the entire point of those actions — see MAX_TURN_STEPS' docstring);
-        # any other read only continues once already mid-chain (step > 1), so a
-        # lone ordinary read at step 1 is untouched from before this loop
-        # existed.
+        # Any read continues; only a write, a clarify, or an explicit respond
+        # ends the turn.
+        #
+        # This used to be gated on a four-action whitelist, which meant a read
+        # outside it terminated the turn at step 1 with its raw payload as the
+        # answer. That is not a rare edge: "what is the due date of homework 1
+        # limits?" makes the model call fetch_assignments — the correct first
+        # step — and the loop then cut it off and rendered all 27 assignments
+        # instead of the one date that was asked for. The model had planned it
+        # right; it was never allowed to finish.
+        #
+        # Widening the whitelist would have fixed that one question and left
+        # the next unanticipated shape broken the same way, so the whitelist is
+        # gone. What bounds the loop instead is real: MAX_TURN_STEPS, the
+        # dedupe above, and the fact that the model has to emit respond/clarify
+        # to say anything at all.
+        #
+        # The cost is one extra call on a turn whose single read was already
+        # the whole answer ("show me my assignments" is now read → respond).
+        # That is the price of not maintaining a table of which questions are
+        # allowed to take two steps.
         is_chainable_step = (
             pending_message_id is None
             and action.action in READ_ACTIONS
             and not result.get("clarify")
-            and (action.action in _CHAINABLE_READ_ACTIONS or step > 1)
         )
         if not is_chainable_step:
             break
-        loop_steps.append({"action": action.action, "result": result})
+        loop_steps.append(
+            {"action": action.action, "result": result,
+             "signature": _step_signature(action)}
+        )
         if step >= MAX_TURN_STEPS:
             result = _step_budget_exhausted_response(loop_steps)
             break
@@ -6458,7 +6839,13 @@ async def handle_chat_message(
                     # offer). Model-authored clarify payloads never reach this —
                     # the key isn't in any action schema — so a replayed request
                     # is always one the app itself chose to defer.
-                    payload=result.get("clarify_payload"),
+                    #
+                    # The action being interrupted is attached HERE rather than
+                    # by whichever chain built the offer: there are five of
+                    # those and counting, and every one of them would otherwise
+                    # need to remember to do it — which is exactly how
+                    # send_message ended up as the workflow that forgot.
+                    payload=_with_pending_action(result.get("clarify_payload"), action),
                 )
         else:
             # Any settled turn answers the outstanding question or abandons it;

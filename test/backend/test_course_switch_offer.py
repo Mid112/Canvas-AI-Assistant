@@ -187,11 +187,12 @@ async def _answer(
     return result, conversation, (forked[-1] if forked else None)
 
 
+
 @pytest.mark.anyio
 async def test_yes_switches_and_replays_the_original_request():
     result, conversation, routed = await _answer("yes")
 
-    terminal, replay, switched = result
+    terminal, replay, switched = result.terminal, result.replay_message, result.conversation
     # No terminal result: the turn carries on and actually does the work.
     assert terminal is None
     assert replay == "who submitted to testing event 2?"
@@ -205,15 +206,15 @@ async def test_yes_switches_and_replays_the_original_request():
 async def test_a_casual_yes_works_too():
     result, conversation, routed = await _answer("go ahead")
 
-    assert result[0] is None
-    assert result[2] is routed
+    assert result.terminal is None
+    assert result.conversation is routed
 
 
 @pytest.mark.anyio
 async def test_no_stays_put_and_does_not_switch():
     result, conversation, routed = await _answer("nah")
 
-    terminal, _, unchanged = result
+    terminal, unchanged = result.terminal, result.conversation
     assert terminal["action"] == "respond"
     assert unchanged is conversation
     assert conversation.course_id == 1
@@ -251,9 +252,9 @@ async def test_naming_the_course_answers_an_ambiguous_offer():
         "capstone project", conversation=conversation
     )
 
-    assert result[0] is None
-    assert result[1] == "who submitted to quiz 1?"
-    assert result[2] is routed
+    assert result.terminal is None
+    assert result.replay_message == "who submitted to quiz 1?"
+    assert result.conversation is routed
 
 
 @pytest.mark.anyio
@@ -262,7 +263,7 @@ async def test_a_course_not_owned_by_this_instructor_is_refused():
     re-checked at use rather than trusted from when it was stored."""
     result, conversation, routed = await _answer("yes", owner_id=999)
 
-    terminal, _, unchanged = result
+    terminal, unchanged = result.terminal, result.conversation
     assert terminal["action"] == "respond"
     assert "no longer available" in terminal["message"]
     assert unchanged.course_id == 1
@@ -274,7 +275,7 @@ async def test_an_offer_without_the_original_request_says_so():
         "yes", payload={"local_course_id": 9, "user_message": ""}
     )
 
-    terminal, _, _unchanged = result
+    terminal = result.terminal
     assert terminal["action"] == "respond"
     assert "lost track" in terminal["message"]
 
@@ -286,6 +287,132 @@ async def test_no_pending_offer_leaves_the_turn_alone():
     result, _, _routed = await _answer("yes", conversation=conversation)
 
     assert result is None
+
+
+# ── handing the interrupted work across ──────────────────────────────────────
+#
+# The reported failure: "send messages to students who submitted testing event
+# 2 saying that they did well" in the wrong course, then "yes please" to the
+# switch — and what came back was a submissions report with the message body
+# gone. Replaying the sentence lets the model re-plan, and it re-planned into
+# a different action. The parsed action has to travel, not the words.
+
+
+def test_the_interrupted_action_travels_with_the_offer():
+    from app.mcp_tools.schemas import SendMessageAction
+    from app.services.chat import _with_pending_action
+
+    action = SendMessageAction.model_validate({
+        "action": "send_message",
+        "local_course_id": 1,
+        "body": "they did well",
+        "recipient_directives": [
+            {"student_reference": "students who submitted testing event 2",
+             "body": "they did well"}
+        ],
+    })
+
+    payload = _with_pending_action({"user_message": "..."}, action)
+
+    assert payload["pending_action"]["action"] == "send_message"
+    assert payload["pending_action"]["body"] == "they did well"
+
+
+def test_rebasing_keeps_the_intent_and_drops_the_old_courses_ids():
+    from app.services.chat import rebase_pending_action
+
+    rebased = rebase_pending_action(
+        {
+            "action": "send_message",
+            "local_course_id": 1,
+            "subject": "Nice work",
+            "body": "they did well",
+            "recipient_directives": [
+                {"student_reference": "students who submitted testing event 2",
+                 "body": "they did well"}
+            ],
+            # Resolved against the course being LEFT — none of these mean
+            # anything in the one being entered.
+            "assignment_id": 4821,
+            "recipient_handle": "rs_abc",
+            "recipient_canvas_user_ids": [501, 502],
+        },
+        course_id=9,
+    )
+
+    assert rebased["local_course_id"] == 9
+    # What the instructor actually said survives.
+    assert rebased["body"] == "they did well"
+    assert rebased["subject"] == "Nice work"
+    assert rebased["recipient_directives"][0]["student_reference"].endswith(
+        "testing event 2"
+    )
+    # What the old course resolved does not.
+    assert "assignment_id" not in rebased
+    assert "recipient_handle" not in rebased
+    assert "recipient_canvas_user_ids" not in rebased
+
+
+def test_rebasing_a_grade_keeps_the_grade_and_the_feedback():
+    """Not a send_message special case — the same rule for every write."""
+    from app.services.chat import rebase_pending_action
+
+    rebased = rebase_pending_action(
+        {
+            "action": "update_grade",
+            "local_course_id": 1,
+            "new_grade": "+5",
+            "feedback": "Well done",
+            "assignment_id": 4821,
+            "student_id": 77,
+        },
+        course_id=9,
+    )
+
+    assert rebased["new_grade"] == "+5"
+    assert rebased["feedback"] == "Well done"
+    assert "assignment_id" not in rebased and "student_id" not in rebased
+
+
+def test_nothing_worth_resuming_falls_back_to_the_words():
+    """None is the signal to replay the sentence, which is still right when
+    there was no action to store."""
+    from app.services.chat import rebase_pending_action
+
+    assert rebase_pending_action(None, 9) is None
+    assert rebase_pending_action({}, 9) is None
+    assert rebase_pending_action({"local_course_id": 1}, 9) is None
+
+
+@pytest.mark.anyio
+async def test_accepting_the_offer_resumes_the_write_rather_than_the_sentence():
+    result, _conv, _routed = await _answer(
+        "yes",
+        payload={
+            **_PAYLOAD,
+            "pending_action": {
+                "action": "send_message",
+                "local_course_id": 1,
+                "body": "they did well",
+                "assignment_id": 4821,
+            },
+        },
+    )
+
+    assert result.pending_action["action"] == "send_message"
+    assert result.pending_action["body"] == "they did well"
+    assert result.pending_action["local_course_id"] == 9
+    assert "assignment_id" not in result.pending_action
+    # The words are still carried as the fallback, not instead of the action.
+    assert result.replay_message == "who submitted to testing event 2?"
+
+
+@pytest.mark.anyio
+async def test_an_offer_with_no_stored_action_still_replays_the_words():
+    result, _conv, _routed = await _answer("yes")
+
+    assert result.pending_action is None
+    assert result.replay_message == "who submitted to testing event 2?"
 
 
 # ── what each transcript is left holding ─────────────────────────────────────
@@ -339,8 +466,8 @@ async def test_an_agreement_outside_the_word_list_still_switches():
         "yeah let's do that", adapter=_adapter("yes", course_id=9)
     )
 
-    assert result[0] is None
-    assert result[1] == "who submitted to testing event 2?"
+    assert result.terminal is None
+    assert result.replay_message == "who submitted to testing event 2?"
     assert routed.course_id == 9
 
 
@@ -350,8 +477,8 @@ async def test_a_refusal_outside_the_word_list_stays_put():
         "I'd rather keep looking here", adapter=_adapter("no")
     )
 
-    assert result[0]["action"] == "respond"
-    assert "Staying in" in result[0]["message"]
+    assert result.terminal["action"] == "respond"
+    assert "Staying in" in result.terminal["message"]
     assert routed is None
     assert conversation.course_id == 1
 
@@ -376,7 +503,7 @@ async def test_a_literal_yes_never_pays_for_a_call():
     result, _conv, routed = await _answer("yes", adapter=adapter)
 
     adapter.generate.assert_not_awaited()
-    assert result[0] is None
+    assert result.terminal is None
     assert routed.course_id == 9
 
 
@@ -394,7 +521,7 @@ async def test_a_named_course_never_pays_for_a_call():
     )
 
     adapter.generate.assert_not_awaited()
-    assert result[0] is None
+    assert result.terminal is None
     assert routed.course_id == 9
 
 
@@ -425,7 +552,7 @@ async def test_the_resolver_picks_among_several_offered_courses():
         adapter=_adapter("yes", course_id=10),
     )
 
-    assert result[0] is None
+    assert result.terminal is None
     assert routed.course_id == 10
     assert routed.course_name == "CPSC 310"
 
