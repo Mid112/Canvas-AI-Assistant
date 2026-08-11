@@ -114,8 +114,16 @@ def synced_course_id(client, auth_headers):
     return _sync_local_course(client, auth_headers)
 
 
-def _register_with_canvas(client, *, token_suffix: str = "") -> dict:
-    """Register a fresh user + connect a Canvas token. Returns auth headers."""
+def _register_with_canvas(
+    client, *, token_suffix: str = "", canvas_token: str | None = None
+) -> dict:
+    """Register a fresh user + connect a Canvas token. Returns auth headers.
+
+    Pass ``canvas_token`` when the test needs to assert which token reached
+    Canvas. unique_canvas_token() is only stable for the first call in a test,
+    so a test that lets this helper make that first call cannot recover the
+    value afterwards — calling the helper again just mints a different one.
+    """
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
@@ -123,10 +131,11 @@ def _register_with_canvas(client, *, token_suffix: str = "") -> dict:
     )
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+    stored_canvas_token = (canvas_token or unique_canvas_token()) + token_suffix
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         connected = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": unique_canvas_token() + token_suffix, "canvas_url": CANVAS_URL},
+            json={"canvas_token": stored_canvas_token, "canvas_url": CANVAS_URL},
             headers=headers,
         )
     assert connected.status_code == 200, connected.text
@@ -605,7 +614,8 @@ def test_list_cached_courses_excludes_deleted_course(client):
 # Verifies: List assignments.
 def test_list_assignments(client):
     """Assignments endpoint uses local course ID — seed a course first to get one."""
-    headers = _register_with_canvas(client)
+    canvas_token = unique_canvas_token()
+    headers = _register_with_canvas(client, canvas_token=canvas_token)
     courses = [_unique_course()]
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
         mock.return_value = courses
@@ -618,8 +628,8 @@ def test_list_assignments(client):
         response = client.get(f"/api/v1/canvas/courses/{local_id}/assignments", headers=headers)
     assert response.status_code == 200
     assert response.json()[0]["name"] == "Assignment 1"
-    # The helper derives a stable per-test token; canvas_course_id is dynamic.
-    mock.assert_awaited_once_with(canvas_course_id, unique_canvas_token(), CANVAS_URL)
+    # Assert the token this test actually stored; canvas_course_id is dynamic.
+    mock.assert_awaited_once_with(canvas_course_id, canvas_token, CANVAS_URL)
 
 
 # Verifies: List assignments unauthenticated.
@@ -646,7 +656,11 @@ def test_list_assignments_local_url_alias(client, monkeypatch):
     docker_canvas = "http://canvas_lms:3000"
 
     email = f"test_{uuid.uuid4()}@example.com"
-    canvas_token = f"test-token-{uuid.uuid4()}"
+    # Read once and reused below. unique_canvas_token() is only stable for the
+    # first call in a test — every later call deliberately returns a fresh
+    # token, so calling it again in the assertion compared the stored token
+    # against a value that was never stored.
+    canvas_token = unique_canvas_token()
     reg = client.post(
         "/api/v1/auth/register",
         json={"name": "Local Canvas User", "email": email, "password": "Secret123!"},
@@ -655,7 +669,7 @@ def test_list_assignments_local_url_alias(client, monkeypatch):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         connected = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": unique_canvas_token(), "canvas_url": local_canvas},
+            json={"canvas_token": canvas_token, "canvas_url": local_canvas},
             headers=headers,
         )
     assert connected.status_code == 200, connected.text
@@ -680,7 +694,7 @@ def test_list_assignments_local_url_alias(client, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()[0]["name"] == "Assignment 1"
-    mock.assert_awaited_once_with(canvas_course_id, unique_canvas_token(), local_canvas)
+    mock.assert_awaited_once_with(canvas_course_id, canvas_token, local_canvas)
 
 
 # Verifies: Get assignment.

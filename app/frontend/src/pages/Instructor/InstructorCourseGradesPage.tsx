@@ -176,10 +176,26 @@ export function InstructorCourseGradesPage() {
       .map((value) => Number(value))
       .filter((value) => Number.isFinite(value));
     const assignmentIdParam = Number(searchParams.get("assignmentId"));
+    // "101:85,102:73" — one target per student, sent instead of `grade` when
+    // the request was relative ("add 5 marks"), since each student lands on a
+    // different number. Malformed pairs are dropped rather than defaulted:
+    // a wrong grade prefilled into an approval flow is worse than a blank one.
+    const studentGrades = new Map<number, string>();
+    for (const pair of (searchParams.get("studentGrades") ?? "").split(",")) {
+      if (!pair) continue;
+      const [rawId, rawGrade] = pair.split(":");
+      const id = Number(rawId);
+      if (Number.isFinite(id) && rawGrade) {
+        studentGrades.set(id, rawGrade);
+      }
+    }
     return {
       assignmentId: Number.isFinite(assignmentIdParam) ? assignmentIdParam : null,
-      studentIds,
+      studentIds: studentIds.length
+        ? studentIds
+        : [...studentGrades.keys()],
       grade: searchParams.get("grade") ?? "",
+      studentGrades,
       feedback: searchParams.get("feedback") ?? "",
     };
   }, [searchParams]);

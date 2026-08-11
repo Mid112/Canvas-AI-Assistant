@@ -1,6 +1,7 @@
 import html
 import json
 import re
+from typing import Any
 
 import httpx
 from fastapi import HTTPException, status
@@ -36,6 +37,78 @@ def _plain_text_description(value: str) -> str:
     return "\n".join(line for line in lines if line).strip()
 
 
+ASSIGNMENT_DRAFT_SYSTEM_PROMPT = (
+    "You help instructors draft Canvas assignments. "
+    "Respond with JSON only: "
+    '{"title": "...", "description": "...", "due_at": "ISO8601 or null", "points_possible": number or null}. '
+    "The description must be plain text only: no HTML tags and no markdown formatting. "
+    'Separate paragraphs with a blank line and start list items with "- ". '
+    "Use null for points_possible when the prompt describes an ungraded assignment. "
+    "Never invent a default point value such as 10 or 100."
+)
+
+# The describe step and a chat turn ask for different things, and the
+# difference only shows up on an empty request.
+#
+# The describe step is reached by an instructor who typed a description and
+# pressed a button: there is always something to work from, and returning
+# nothing would be a broken feature. A chat turn can carry no subject matter
+# at all — "can you create an assignment?" — and the shared prompt above,
+# having never been told otherwise, answered it with a title of "New
+# Assignment" over three invented tasks about "the assigned reading". That
+# reached the preview looking like a finished draft of an assignment nobody
+# had described.
+#
+# So: produce nothing rather than something fake. An empty draft lands the
+# instructor on the describe step, which is where a request with no
+# description belongs.
+_NOTHING_TO_DRAFT_FROM = (
+    "If the request does not say what the assignment is about — "
+    '"create an assignment" and nothing more — return {"title": "", '
+    '"description": ""}. Do not invent a topic, a placeholder title such as '
+    '"New Assignment", or filler tasks such as "review the assigned reading". '
+    "Returning empty is correct and expected here; a made-up draft is not, "
+    "because it looks finished and gets published."
+)
+
+CHAT_ASSIGNMENT_DRAFT_SYSTEM_PROMPT = (
+    f"{ASSIGNMENT_DRAFT_SYSTEM_PROMPT} {_NOTHING_TO_DRAFT_FROM}"
+)
+
+
+async def draft_assignment_content(prompt: str, *, adapter: Any) -> tuple[str, str]:
+    """A title and description written from the instructor's own words.
+
+    The same generator the create page's describe step uses, reachable from
+    a chat turn. Chat used to have no way to call it: it collected fields by
+    interrogation instead, asking "What should the assignment description
+    say?" about a request that had already said it.
+
+    Reads the whole request at once rather than one field at a time, which
+    is the point — "an assignment called September 11th due next Friday"
+    only parses if something decides which phrase is the name and which is
+    the date, and that decision is exactly what a field-by-field question
+    cannot make.
+
+    Never raises, and never fabricates: on any failure — and on a request
+    that names no subject matter at all — both values come back empty and the
+    caller keeps whatever it already had. An assignment with a thin
+    description is a nuisance the instructor fixes in the form; an assignment
+    whose description was invented wholesale is worse, because it looks
+    finished.
+    """
+    try:
+        raw = await adapter.generate(CHAT_ASSIGNMENT_DRAFT_SYSTEM_PROMPT, prompt)
+        data = loads_llm_json(raw)
+    except Exception:
+        return "", ""
+    if not isinstance(data, dict):
+        return "", ""
+    title = str(data.get("title") or "").strip()
+    description = _plain_text_description(str(data.get("description") or "")).strip()
+    return title, description
+
+
 async def generate_assignment_draft(
     body: AssignmentDraftRequest, db: AsyncSession, user_id: int
 ) -> AssignmentDraftResponse:
@@ -46,15 +119,7 @@ async def generate_assignment_draft(
         body.prompt, content_label="Assignment description prompt"
     )
 
-    system = (
-        "You help instructors draft Canvas assignments. "
-        "Respond with JSON only: "
-        '{"title": "...", "description": "...", "due_at": "ISO8601 or null", "points_possible": number or null}. '
-        "The description must be plain text only: no HTML tags and no markdown formatting. "
-        'Separate paragraphs with a blank line and start list items with "- ". '
-        "Use null for points_possible when the prompt describes an ungraded assignment. "
-        "Never invent a default point value such as 10 or 100."
-    )
+    system = ASSIGNMENT_DRAFT_SYSTEM_PROMPT
     # Same resolution as a chat turn: the instructor's chosen provider, with
     # their stored key decrypted and attached. Building settings straight from
     # the deployment config here meant the generator ran on the admin's

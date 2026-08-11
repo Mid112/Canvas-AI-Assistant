@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -61,31 +62,80 @@ async def list_message_drafts(
     return list(result.all())
 
 
+_DRAFT_SYSTEM_PROMPT = """You write the announcement or private message an
+instructor has just asked for. You are writing the message itself — not
+advice about writing one.
+
+Respond with JSON only: {"subject": "...", "body": "..."}
+
+subject: a short, specific line an instructor would actually send. "Midterm 2
+  Reminder", not "Course Update".
+body: the finished message, addressed to the students who will receive it.
+  Open the way a teacher opens a note to their class, say the thing, and stop.
+  Two or three sentences is usually right.
+
+Write only from what the instructor told you. Do not invent a date, a time, a
+room, a weighting or a link they did not give you — an announcement that
+states a due date nobody set is worse than one that omits it. If a detail
+would obviously help and you do not have it, leave it out rather than guess.
+
+Never emit instructions or placeholders. "Remind students about the
+assignment, due date, and any next steps." is a description of a message, and
+sending it to a class is the failure this prompt exists to prevent."""
+
+
+async def draft_subject_and_body(
+    prompt: str,
+    template_name: str | None = None,
+    *,
+    adapter: Any,
+) -> tuple[str, str]:
+    """Write a real subject and body from an instructor's own words.
+
+    The single place a message is drafted, so the Messages tab's own "generate
+    from a prompt" and a chat turn that hands off to it produce the same
+    quality of writing. They used to differ: chat handed over an empty draft
+    and the Messages page filled the gap with a template preset, so the
+    instructor was shown "Remind students about the assignment, due date, and
+    any next steps." — a description of a message, sitting in the body field
+    of a message about to go to a class.
+
+    Never raises. On any failure the prompt itself becomes the body: it is at
+    least the instructor's own words, which is a far better starting point for
+    editing than a placeholder about what they might write.
+    """
+    try:
+        raw = await adapter.generate(
+            _DRAFT_SYSTEM_PROMPT,
+            f"Template: {template_name or 'general'}\nInstructor's request: {prompt}",
+        )
+        data = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
+        subject = str(data.get("subject") or "").strip()
+        body = str(data.get("body") or "").strip()
+        if not body:
+            return subject or "Course Announcement", prompt
+        return subject or "Course Announcement", body
+    except Exception:
+        return "Course Announcement", prompt
+
+
 async def _generate_draft_content(
     prompt: str,
     template_name: str | None,
     adapter_settings: dict[str, str] | None = None,
 ) -> tuple[str, str]:
-    """Draft a subject and body from a prompt.
+    """Draft a subject and body from a prompt, building an adapter from
+    already-resolved settings.
 
-    Takes settings already resolved rather than a session: the caller has to
-    resolve them anyway to file the AI-health record under the right provider,
-    and doing it twice invites the two disagreeing.
+    Takes settings rather than a session: the caller has to resolve them
+    anyway to file the AI-health record under the right provider, and doing it
+    twice invites the two disagreeing. The writing itself is
+    draft_subject_and_body's job.
     """
-    system = (
-        "You draft class announcement emails for instructors. "
-        "Respond with JSON only: {\"subject\": \"...\", \"body\": \"...\"}"
-    )
-    user_msg = f"Template: {template_name or 'general'}\nRequest: {prompt}"
     adapter = get_llm_adapter(
         adapter_settings or {"provider": settings.DEFAULT_LLM_PROVIDER}
     )
-    raw = await adapter.generate(system, user_msg)
-    try:
-        data = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
-        return data.get("subject", "Course Announcement"), data.get("body", prompt)
-    except (json.JSONDecodeError, ValueError):
-        return "Course Announcement", prompt
+    return await draft_subject_and_body(prompt, template_name, adapter=adapter)
 
 
 async def create_message_draft(db: AsyncSession, user: User, body: MessageDraftCreate) -> MessageDraft:

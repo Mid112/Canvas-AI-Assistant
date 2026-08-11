@@ -153,6 +153,11 @@ def test_resolve_missing_submissions_chains_into_send_message_in_one_turn(client
 # Verifies: hitting MAX_TURN_STEPS without ever reaching a terminal action
 # surfaces a plain "respond" fallback (not an error), carrying forward the
 # last step's own summary rather than silently dropping it.
+#
+# Every step asks something GENUINELY different (a new score range each time).
+# A model that repeated one call instead is caught far earlier by the
+# repeated-read guard below — this is the case that guard cannot catch, and
+# the only one the step budget still has to backstop.
 def test_step_budget_exhaustion_falls_back_to_a_response(client):
     headers, local_course_id = _register_with_canvas(client)
     students = [_student("501", local_course_id, "Alice")]
@@ -174,11 +179,11 @@ def test_step_budget_exhaustion_falls_back_to_a_response(client):
                 '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", '
                 '"assignment_reference": "assignment 4"}'
             )
-        # Every subsequent step: keeps proposing the same chainable read,
-        # now with a verified assignment_id (no further resolver sub-call
-        # needed), so the loop never reaches a terminal action on its own.
+        # Every subsequent step: a distinct chainable read, so the loop never
+        # reaches a terminal action and never repeats itself either.
         return (
-            '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", "assignment_id": 222}'
+            '{"action": "resolve_score_range", "course_name": "CPSC 310", '
+            f'"assignment_id": 222, "min_score": {outer_calls}, "max_score": 100}}'
         )
 
     mock_adapter = AsyncMock()
@@ -205,6 +210,65 @@ def test_step_budget_exhaustion_falls_back_to_a_response(client):
     assert reply["action"] == "respond"
     assert "allowed number of steps" in reply["message"]
     assert "Here's what I found so far" in reply["message"]
+
+
+# Verifies: a model that asks for the same read over and over is stopped
+# early, with that read's own answer, rather than spending the whole budget.
+#
+# This matters more now that any read may chain. Before, only four whitelisted
+# actions could loop; now a model that fails to notice it already has the data
+# could burn fifteen Canvas round trips and hand back a "couldn't finish"
+# message instead of the answer that was sitting in step 1.
+def test_a_model_that_keeps_asking_the_same_thing_gets_answered_not_stalled(client):
+    headers, local_course_id = _register_with_canvas(client)
+    students = [_student("501", local_course_id, "Alice")]
+    submissions = [_submission(501, SubmissionStatus.missing, "Alice")]
+
+    outer_calls = 0
+
+    async def dynamic_generate(system_prompt, message, history, timeout):
+        nonlocal outer_calls
+        if "You resolve which assignment" in system_prompt:
+            return '{"assignment_id": 222}'
+        outer_calls += 1
+        # Byte-identical every time. Dedupe keys on the arguments the model
+        # asked with, not the ones they resolve to, so two spellings of the
+        # same read still cost two Canvas calls — deduping on resolved
+        # arguments would mean paying for the resolution to find that out.
+        return (
+            '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", '
+            '"assignment_reference": "assignment 4"}'
+        )
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.side_effect = dynamic_generate
+
+    fetch_submissions = AsyncMock(return_value=submissions)
+    with (
+        patch("app.services.chat.get_llm_adapter", return_value=mock_adapter),
+        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_two_assignments())),
+        patch("app.services.resolved_set.get_submissions", new=fetch_submissions),
+        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
+    ):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "who's missing assignment 4", "conversation_id": None},
+            headers=headers,
+        )
+    body = response.json()
+
+    assert body["is_error"] is False, body
+    # Stopped well short of the budget instead of grinding it out.
+    assert outer_calls < 6, outer_calls
+    # And Canvas was read once, not once per step — the repeats were served
+    # from the result already in hand.
+    assert fetch_submissions.await_count == 1
+
+    # The instructor gets the actual answer, not "I couldn't finish this".
+    reply = body["reply"]
+    assert reply["action"] == "resolve_missing_submissions"
+    assert "allowed number of steps" not in str(reply)
+    assert reply["count"] == 1
 
 
 # Verifies: a modify turn never enters the step loop, even if the model

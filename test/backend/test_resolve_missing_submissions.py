@@ -257,7 +257,15 @@ def test_resolve_missing_submissions_filters_persists_and_chains(client):
     assert len(rows) == 1
     assert rows[0]["handle"].startswith("rs_")
     assert rows[0]["kind"] == "missing_submissions"
-    assert rows[0]["query"] == {"local_course_id": local_course_id, "assignment_id": 222, "status": "missing"}
+    # "status" stays the single slug the frontend reads as a string; "statuses"
+    # records the categories as a list, because a union slug ("missing_late")
+    # can't be parsed back into its parts by a consumer of the audit trail.
+    assert rows[0]["query"] == {
+        "local_course_id": local_course_id,
+        "assignment_id": 222,
+        "status": "missing",
+        "statuses": ["missing"],
+    }
     assert rows[0]["snapshot_recipients"] == [{"user_id": 501, "name": "Alice"}]
 
     # Call 0: the main action call. Call 1: the internal assignment

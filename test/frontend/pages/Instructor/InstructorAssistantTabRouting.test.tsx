@@ -7,7 +7,7 @@
  * "reloaded in a loop and shook". The mock below reproduces the churn
  * faithfully: a new selectActiveCourse identity on every single render.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -137,9 +137,29 @@ vi.mock("@/services/instructorLlmProviders", async () => {
   };
 });
 
+/** The page's handler for "the server ran this turn in a different course".
+ * Captured so a test can fire it the way a re-routed reply does. */
+const resolvedCourse = vi.hoisted(() => ({
+  current: undefined as
+    | ((course: {
+        localCourseId: number;
+        courseName?: string;
+        conversationId?: number;
+      }) => void)
+    | undefined,
+}));
+
 vi.mock("@/components/chat/ChatWindow", () => ({
-  ChatWindow: (props: { onPendingWorkChange?: (value: boolean) => void }) => {
+  ChatWindow: (props: {
+    onPendingWorkChange?: (value: boolean) => void;
+    onResolvedCourse?: (course: {
+      localCourseId: number;
+      courseName?: string;
+      conversationId?: number;
+    }) => void;
+  }) => {
     renderCount.current += 1;
+    resolvedCourse.current = props.onResolvedCourse;
     // The page reads pending work to decide foreground vs background.
     if (pendingWork.current) {
       props.onPendingWorkChange?.(true);
@@ -300,6 +320,50 @@ describe("InstructorAssistantPage tab routing", () => {
 
     expect(screen.getAllByRole("tab")).toHaveLength(2);
     expect(selectActiveCourseSpy).not.toHaveBeenCalled();
+  });
+
+  // The bug as reported: on a Math 101 tab, ask about an assignment that lives
+  // in Capstone Project, answer "yes" to the switch. The server routed the turn
+  // to the Capstone conversation and answered from the right course — and the
+  // strip stayed put, still labelled Math 101, with Math 101 still active. The
+  // tab a reply lands in has to be the course it was answered from, or the
+  // instructor is reading one course's data under another course's name.
+  //
+  // This half of the wiring was already right — the signal never arrived (see
+  // services/assistant.test.ts, which is where that fix is pinned). Covered
+  // here so the two halves cannot drift apart silently.
+  it("moves to the course a re-routed turn landed in", async () => {
+    const user = userEvent.setup();
+    render(<CourseSwitchHarness />);
+    await screen.findByTestId("chat-window");
+    // Two tabs, still on the first — the shape of the report.
+    await user.click(screen.getByRole("button", { name: "New chat tab" }));
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    await user.click(screen.getByRole("tab", { name: /Course 1/ }));
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
+      "Course 1",
+    );
+    selectActiveCourseSpy.mockClear();
+
+    await act(async () => {
+      resolvedCourse.current?.({
+        localCourseId: 2,
+        courseName: "C2: Course 2",
+        conversationId: 77,
+      });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
+        "Course 2",
+      ),
+    );
+    // And the active course follows the tab, per invariant 1 — otherwise the
+    // dropdown still names the course they left.
+    expect(selectActiveCourseSpy).toHaveBeenCalledWith(2);
+    // One tab per course: following a switch reuses the course's tab rather
+    // than stacking a second one on it.
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
   });
 
   // Scenario 2: an unconfirmed preview is open, so the new course's tab opens

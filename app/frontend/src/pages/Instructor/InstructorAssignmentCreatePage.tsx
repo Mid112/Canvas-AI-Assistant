@@ -112,6 +112,44 @@ export function InstructorAssignmentCreatePage() {
   const [step, setStep] = useState<AssignmentCreateStep>(
     hasGeneratedAssignment ? "review" : "describe",
   );
+  // A request that never said what the assignment is about arrives with no
+  // title and no description, but it can still carry a due date or a point
+  // value the instructor did state. Landing on Review with those alone showed
+  // a "Generated draft" that had generated nothing, under a blocking "Due date
+  // is required" — a beginner who did not know details could be typed inline
+  // had no way forward except back to Describe.
+  //
+  // Describe is the right step for a request with no description. These are
+  // surfaced there so it is clear they were not thrown away, and re-applied
+  // after generating so they survive the trip.
+  const carriedOverDueDate = hasGeneratedAssignment
+    ? ""
+    : (seededDraft?.dueDate?.trim() ?? "");
+  const carriedOverPoints =
+    !hasGeneratedAssignment &&
+    typeof seededDraft?.pointsPossible === "number" &&
+    Number.isFinite(seededDraft.pointsPossible) &&
+    seededDraft.pointsPossible > 0
+      ? seededDraft.pointsPossible
+      : null;
+  const carriedOverDetails = useMemo(
+    () => [
+      ...(carriedOverDueDate
+        ? [
+            {
+              label: "Due date",
+              value: formatDueDateForDisplay(carriedOverDueDate, {
+                treatAsDatetimeLocal: true,
+              }),
+            },
+          ]
+        : []),
+      ...(carriedOverPoints !== null
+        ? [{ label: "Points", value: String(carriedOverPoints) }]
+        : []),
+    ],
+    [carriedOverDueDate, carriedOverPoints],
+  );
   // Derived rather than stored: accessToken can settle after mount, and a
   // stored initial value computed before that would leave the spinner off
   // for the whole generate call.
@@ -382,7 +420,16 @@ export function InstructorAssignmentCreatePage() {
         modelSettings,
       });
       resetPreviewState();
-      setDraft(generated);
+      // The generator answers the description prompt; it was never told about
+      // a due date or a point value the instructor gave the assistant. Its own
+      // blank for those is an absence of information, not a decision to clear
+      // them, so the carried-over value fills it. A value the generator did
+      // produce is the fresher statement and wins.
+      setDraft({
+        ...generated,
+        dueDate: generated.dueDate?.trim() || carriedOverDueDate,
+        pointsPossible: generated.pointsPossible ?? carriedOverPoints,
+      });
       setStep("review");
     } catch (error) {
       setGenerateError(
@@ -638,6 +685,7 @@ export function InstructorAssignmentCreatePage() {
           onGenerate={handleGenerate}
           onValuesChange={handleDescribeValuesChange}
           onSwitchToQuiz={handleSwitchToQuiz}
+          carriedOverDetails={carriedOverDetails}
         />
       ) : isEnhancingDescription ? (
         /* There's a real LLM round-trip between the assistant handoff and a

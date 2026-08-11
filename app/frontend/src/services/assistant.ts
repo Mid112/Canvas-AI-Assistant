@@ -41,6 +41,10 @@ interface ChatApiResponse {
   conversation_id: number;
   reply: Record<string, unknown>;
   is_error: boolean;
+  /** Set only when the server moved this turn to a different conversation
+   * than the client asked for — see ChatResponse in schemas/chat.py. */
+  course_id?: number | null;
+  course_name?: string | null;
 }
 
 export interface ConversationMessage {
@@ -110,8 +114,26 @@ function toAssistantMessageResult(
       ? response.reply.pending_message_id
       : mapped.pendingMessageId;
 
+  // A server-side course switch is the one case where the course changes on a
+  // turn that produced no write preview, so proposed_action.local_course_id —
+  // the only course signal the mapper has — is absent. Without this the tab
+  // strip never hears about it: the answer arrives from the right course under
+  // a tab still named after the one the instructor left.
+  //
+  // Second, not first: a preview's own course is what the instructor is about
+  // to confirm, and that must keep winning.
+  const resolvedCourse =
+    mapped.resolvedCourse ??
+    (typeof response.course_id === "number"
+      ? {
+          localCourseId: response.course_id,
+          ...(response.course_name ? { courseName: response.course_name } : {}),
+        }
+      : undefined);
+
   return {
     ...mapped,
+    ...(resolvedCourse ? { resolvedCourse } : {}),
     conversationId: response.conversation_id,
     pendingMessageId,
     isError: Boolean(response.is_error || response.reply?.error),

@@ -311,34 +311,38 @@ def test_plain_send_message_without_new_fields_is_unaffected(client):
     assert _tool_call_logs(body["conversation_id"]) == []
 
 
-# Verifies the announcement guard still fires when the model tries to attach
-# private recipients to a plainly public request.
+# Verifies the model's delivery decision reaches the preview intact.
 #
-# _explicit_announcement_request/_force_announcement_delivery exist because a
-# public announcement is irreversible and goes to the whole class: if the
-# instructor asked to announce, private delivery must not survive. The guard
-# was loosened to let a combined "announce AND message X" through, so this
-# pins the half that must not have moved — the flag alone is what unlocks it,
-# and here the flag is absent.
-def test_announcement_request_still_strips_recipients_without_the_combined_flag(client):
+# This used to assert the opposite: the server re-read the raw message for
+# announcement keywords and stripped every recipient the model had set. That
+# guard is gone, because it could only approximate a judgement the model had
+# already made with the whole sentence in view, and each near-miss needed
+# another pattern — a negation lookaround, a carve-out for "don't forget to
+# post an announcement", a conjunction rule for "and also message Alice".
+#
+# Nothing is unguarded. send_message is form-handoff: this draft opens in the
+# Messages composer, whose confirmation names the delivery in the largest text
+# on screen before anything is sent, so a wrong reading is one visible field
+# the instructor changes rather than mail already gone.
+def test_the_models_recipients_are_not_stripped_by_the_wording(client):
     headers, local_course_id = _register_with_canvas(client)
     students = [_student("501", local_course_id, "Alice")]
 
-    llm_output = (
+    # Two turns now, where the old guard needed one: stripping the recipients
+    # meant directive resolution never ran at all.
+    llm_outputs = [
         '{"action": "send_message", "course_name": "CPSC 310", "subject": "Hi class", '
         '"body": "Welcome back.", "recipient_directives": '
-        '[{"student_reference": "Alice", "body": "Just for you."}]}'
-    )
+        '[{"student_reference": "Alice", "body": "Just for you."}]}',
+        '{"resolutions": [{"student_reference": "Alice", "canvas_user_id": 501}]}',
+    ]
 
     with patch("app.mcp_tools.dispatcher.get_students", new=AsyncMock(return_value=students)):
-        body = _chat(client, headers, "post an announcement to the class", llm_output)
+        body = _chat(client, headers, "post an announcement to the class", llm_outputs)
 
     assert body["is_error"] is False, body
-    reply = body["reply"]
-    proposed = reply["proposed_action"]
-    assert proposed["recipient_canvas_user_ids"] is None
-    assert not proposed.get("recipient_directives")
-    assert "additional_previews" not in reply
+    proposed = body["reply"]["proposed_action"]
+    assert proposed["recipient_canvas_user_ids"] == [501]
 
 
 # Verifies: a grouped send_message batch is form-handoff only — no chat

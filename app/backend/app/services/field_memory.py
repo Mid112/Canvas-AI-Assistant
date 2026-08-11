@@ -167,8 +167,47 @@ _PENDING_EXPECTATION_KEY = "pending_expectation"
 _EXPECTATION_CANDIDATE_CAP = 12
 
 _AFFIRMATIVES = frozenset(
-    {"yes", "yep", "yeah", "yup", "sure", "ok", "okay", "correct", "right", "y"}
+    {"yes", "yep", "yeah", "yup", "sure", "ok", "okay", "correct", "right", "y",
+     "go ahead", "do it", "please do", "yes please", "sounds good", "switch",
+     "absolutely", "definitely", "affirmative", "confirm", "confirmed"}
 )
+
+# No strict "NO" required — instructors answer a yes/no question in whatever
+# words come to hand, and reading "nah" as a fresh request instead of a
+# refusal is how a confirmation loop gets stuck.
+_NEGATIVES = frozenset(
+    {"no", "nope", "nah", "n", "negative", "don't", "dont", "do not",
+     "no thanks", "no thank you", "cancel", "stop", "never mind", "nevermind",
+     "leave it", "stay", "stay here", "keep it"}
+)
+
+
+def read_yes_no(reply: str) -> bool | None:
+    """True/False for an affirmative/negative reply, None if it is neither.
+
+    None is the important return: it means the instructor said something
+    other than an answer, and the caller must not treat that as consent.
+    Silence-as-yes on a course switch would move a write to a different
+    Canvas course than the one they were looking at.
+
+    Matched on the whole reply, not a substring: "no problem, go ahead" is
+    agreement, and a naive "no" search would read it as refusal.
+    """
+    normalized = " ".join((reply or "").lower().split()).strip(" .!?,")
+    if not normalized:
+        return None
+    if normalized in _AFFIRMATIVES:
+        return True
+    if normalized in _NEGATIVES:
+        return False
+    # A leading answer word still counts ("yes, switch to capstone"), which is
+    # how people actually reply, but only when the reply *starts* there.
+    first = normalized.split(",")[0].strip()
+    if first in _AFFIRMATIVES:
+        return True
+    if first in _NEGATIVES:
+        return False
+    return None
 
 _ORDINAL_WORDS = {
     "first": 1, "1st": 1, "one": 1,
@@ -176,6 +215,21 @@ _ORDINAL_WORDS = {
     "third": 3, "3rd": 3, "three": 3,
     "fourth": 4, "4th": 4, "four": 4,
     "fifth": 5, "5th": 5, "five": 5,
+}
+
+# Ordinals safe to spot *inside* a longer sentence. The cardinals are not:
+# "one" and "two" are ordinary English words, so scanning for them turned
+# "which one has more students?" and "no one submitted yet" into a vote for
+# candidate 1 — a question and a statement of fact both read as a choice.
+# On a yes/no course-switch offer that false positive doesn't just pick the
+# wrong item, it moves the instructor's work into another Canvas course.
+#
+# They stay in _ORDINAL_WORDS for the whole-reply match above, where a bare
+# "two" is unambiguously an answer to "which of these?".
+_ORDINAL_SCAN_WORDS = {
+    word: index
+    for word, index in _ORDINAL_WORDS.items()
+    if word not in {"one", "two", "three", "four", "five"}
 }
 
 
@@ -186,14 +240,22 @@ def record_pending_expectation(
     question: str,
     candidates: list[dict[str, Any]] | None = None,
     action: str | None = None,
+    payload: dict[str, Any] | None = None,
 ) -> None:
     """Remember what the assistant just asked, so the next turn can read the
-    reply as an answer to it rather than as a fresh request."""
+    reply as an answer to it rather than as a fresh request.
+
+    ``payload`` carries the request that was interrupted by the question —
+    for a course-switch offer, the action the instructor originally asked
+    for. Without it a "yes" only changes the course and drops what they
+    wanted done in it, making them retype the whole request.
+    """
     memory = dict(conversation.field_memory or {})
     memory[_PENDING_EXPECTATION_KEY] = {
         "field": field,
         "question": question,
         "action": action,
+        "payload": payload,
         "candidates": [
             {"id": candidate.get("id"), "label": str(candidate.get("label", ""))}
             for candidate in (candidates or [])[:_EXPECTATION_CANDIDATE_CAP]
@@ -263,8 +325,8 @@ def resolve_against_expectation(
         index = int(stripped)
     if index is None:
         for word in stripped.replace(",", " ").split():
-            if word in _ORDINAL_WORDS:
-                index = _ORDINAL_WORDS[word]
+            if word in _ORDINAL_SCAN_WORDS:
+                index = _ORDINAL_SCAN_WORDS[word]
                 break
     if index is not None and 1 <= index <= len(candidates):
         return {"field": expectation.get("field"), **candidates[index - 1]}

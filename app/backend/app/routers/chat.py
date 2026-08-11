@@ -168,7 +168,20 @@ async def chat(
         body.model_settings.model_dump(exclude_none=True) if body.model_settings else None,
         body.deferred_request_id,
     )
-    return ChatResponse(conversation_id=conversation.id, reply=reply, is_error=is_error)
+    # A conversation id that isn't the one the client sent means the server
+    # re-routed this turn (handle_chat_message → _find_or_fork_conversation_for_course,
+    # after the instructor accepted a course-switch offer). Only then is the
+    # course reported: on an ordinary turn the ids match and this stays null,
+    # so nothing about an unmoved turn changes. A first turn sends no
+    # conversation id at all and is a creation, not a move.
+    moved = body.conversation_id is not None and conversation.id != body.conversation_id
+    return ChatResponse(
+        conversation_id=conversation.id,
+        reply=reply,
+        is_error=is_error,
+        course_id=conversation.course_id if moved else None,
+        course_name=conversation.course_name if moved else None,
+    )
 
 
 @router.post("/course-context", response_model=CourseContextResponse)
