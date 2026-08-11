@@ -12,11 +12,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from canvas_test_utils import unique_canvas_token
 from integration_helpers import CANVAS_URL, admin_login, auth, register_instructor
 
 DIAGNOSTICS = "/api/v1/admin/troubleshoot/diagnostics"
 INSTRUCTOR_CANVAS_CONNECTIONS = "/api/v1/admin/troubleshoot/instructor-canvas-connections"
-CANVAS_TOKEN = f"secret-canvas-token-{uuid.uuid4()}"
+# Deliberately not a module-level constant. Two tests here each connect their
+# own instructor, and a Canvas token may only be held by one connection per
+# Canvas URL (uq_canvas_url_token_fingerprint) — sharing one value between them
+# makes the second registration a 409. Each test takes its own token instead.
+def _secret_canvas_token() -> str:
+    return f"secret-canvas-token-{unique_canvas_token()}"
 
 
 @pytest.fixture(scope="module")
@@ -103,6 +109,7 @@ def test_instructor_canvas_connections_never_exposes_canvas_token(client, admin_
     """Same regression guard as test_troubleshoot_diagnostics_never_exposes_canvas_token,
     applied to the dedicated connections-listing endpoint."""
     email = f"tokencheck_{uuid.uuid4()}@example.com"
+    canvas_token = _secret_canvas_token()
     reg = client.post(
         "/api/v1/auth/register",
         json={"name": "Token Check Connections", "email": email, "password": "Secret123!"},
@@ -112,14 +119,14 @@ def test_instructor_canvas_connections_never_exposes_canvas_token(client, admin_
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         connect = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": CANVAS_TOKEN, "canvas_url": CANVAS_URL},
+            json={"canvas_token": canvas_token, "canvas_url": CANVAS_URL},
             headers=headers,
         )
     assert connect.status_code == 200, connect.json()
 
     resp = client.get(INSTRUCTOR_CANVAS_CONNECTIONS, headers=admin_headers)
 
-    assert CANVAS_TOKEN not in resp.text
+    assert canvas_token not in resp.text
 
 
 def test_troubleshoot_diagnostics_never_exposes_canvas_token(client, admin_headers):
@@ -127,6 +134,7 @@ def test_troubleshoot_diagnostics_never_exposes_canvas_token(client, admin_heade
     with a known token, then asserts that token never appears anywhere in
     the diagnostics response body -- encrypted or plaintext."""
     email = f"tokencheck_{uuid.uuid4()}@example.com"
+    canvas_token = _secret_canvas_token()
     reg = client.post(
         "/api/v1/auth/register",
         json={"name": "Token Check", "email": email, "password": "Secret123!"},
@@ -136,14 +144,14 @@ def test_troubleshoot_diagnostics_never_exposes_canvas_token(client, admin_heade
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         connect = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": CANVAS_TOKEN, "canvas_url": CANVAS_URL},
+            json={"canvas_token": canvas_token, "canvas_url": CANVAS_URL},
             headers=headers,
         )
     assert connect.status_code == 200, connect.json()
 
     diagnostics = client.get(DIAGNOSTICS, headers=admin_headers)
 
-    assert CANVAS_TOKEN not in diagnostics.text
+    assert canvas_token not in diagnostics.text
     # Also guard against the encrypted form ever round-tripping through --
     # not directly checkable without decrypting, but DiagnosticsResponse has
     # no field that could carry it, so this is a structural guarantee backed

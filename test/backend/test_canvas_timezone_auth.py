@@ -20,13 +20,13 @@ def _saved_connection(db):
 @pytest.mark.asyncio
 async def test_update_canvas_token_stores_canvas_time_zone():
     db = AsyncMock()
-    # Three scalar lookups, in order: no existing connection for this URL,
-    # no other account already holding this token, then the refreshed user.
-    # The old two-item side_effect predated the duplicate-token check being
-    # added in the middle, so its truthy sentinel landed there instead of on
-    # the refresh — and every one of these tests 409'd before ever reaching
-    # the timezone it was written to assert on.
-    db.scalar = AsyncMock(side_effect=[None, None, SimpleNamespace(id=1)])
+    # Two scalar lookups, in order: no existing connection for this URL, then
+    # the refreshed user. The duplicate-token check sits between them but is
+    # patched out below, so it issues no query of its own — a third entry here
+    # left the refresh holding None, and update_canvas_token raised "404: User
+    # not found" before reaching the timezone these tests exist to assert on.
+    # Count the queries the code under test actually makes, not the steps.
+    db.scalar = AsyncMock(side_effect=[None, SimpleNamespace(id=1)])
     db.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: []))
     user = SimpleNamespace(id=1)
 
@@ -65,13 +65,13 @@ async def test_update_canvas_token_survives_an_unreachable_profile_endpoint():
     almost every test sets a Canvas token through this path.
     """
     db = AsyncMock()
-    # Three scalar lookups, in order: no existing connection for this URL,
-    # no other account already holding this token, then the refreshed user.
-    # The old two-item side_effect predated the duplicate-token check being
-    # added in the middle, so its truthy sentinel landed there instead of on
-    # the refresh — and every one of these tests 409'd before ever reaching
-    # the timezone it was written to assert on.
-    db.scalar = AsyncMock(side_effect=[None, None, SimpleNamespace(id=1)])
+    # Two scalar lookups, in order: no existing connection for this URL, then
+    # the refreshed user. The duplicate-token check sits between them but is
+    # patched out below, so it issues no query of its own — a third entry here
+    # left the refresh holding None, and update_canvas_token raised "404: User
+    # not found" before reaching the timezone these tests exist to assert on.
+    # Count the queries the code under test actually makes, not the steps.
+    db.scalar = AsyncMock(side_effect=[None, SimpleNamespace(id=1)])
     db.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: []))
     user = SimpleNamespace(id=1)
 
@@ -97,13 +97,13 @@ async def test_update_canvas_token_survives_an_unreachable_profile_endpoint():
 async def test_update_canvas_token_ignores_a_non_string_time_zone():
     """Canvas can return null for accounts that never set one."""
     db = AsyncMock()
-    # Three scalar lookups, in order: no existing connection for this URL,
-    # no other account already holding this token, then the refreshed user.
-    # The old two-item side_effect predated the duplicate-token check being
-    # added in the middle, so its truthy sentinel landed there instead of on
-    # the refresh — and every one of these tests 409'd before ever reaching
-    # the timezone it was written to assert on.
-    db.scalar = AsyncMock(side_effect=[None, None, SimpleNamespace(id=1)])
+    # Two scalar lookups, in order: no existing connection for this URL, then
+    # the refreshed user. The duplicate-token check sits between them but is
+    # patched out below, so it issues no query of its own — a third entry here
+    # left the refresh holding None, and update_canvas_token raised "404: User
+    # not found" before reaching the timezone these tests exist to assert on.
+    # Count the queries the code under test actually makes, not the steps.
+    db.scalar = AsyncMock(side_effect=[None, SimpleNamespace(id=1)])
     db.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: []))
     user = SimpleNamespace(id=1)
 
