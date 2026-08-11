@@ -83,6 +83,7 @@ from app.services.canvas_timezone import get_instructor_canvas_timezone
 from app.services.deferred_assistant import defer_assistant_request, mark_deferred_request_resumed
 from app.services.due_date_resolver import resolve_due_date
 from app.services.failed_operations import record_failed_operation
+from app.services.feedback_draft import draft_feedback_comment
 from app.services.field_memory import (
     _PARTIAL_PLAN_SAFE_KEYS,
     clear_course_scoped_field_memory,
@@ -4652,6 +4653,46 @@ async def _ensure_write_content_is_drafted(
     return _rebuild_with(action, proposed)
 
 
+async def _ensure_feedback_is_written(
+    action: Any, user_message: str, adapter: LLMAdapter
+) -> Any:
+    """Write an update_grade's feedback comment before the Grades tab opens.
+
+    "Give encouraging feedback to students who scored 70-96" resolved the
+    three students correctly and then handed over an empty comment box: the
+    audience worked, the content did not exist. Same gap the Messages tab had
+    before _ensure_message_is_written, in the one place left that still had it.
+
+    Only for a feedback-only request — no new_grade. A request that names a
+    grade and no comment wanted a grade change, and attaching an invented
+    comment to a real mark on a student's record is not a gap worth filling.
+    """
+    if action.action == "update_grade":
+        proposed = action.model_dump()
+    elif (
+        action.action == "intent_preview"
+        and isinstance(getattr(action, "proposed_action", None), dict)
+        and action.proposed_action.get("action") == "update_grade"
+    ):
+        proposed = dict(action.proposed_action)
+    else:
+        return action
+
+    if str(proposed.get("new_grade") or "").strip():
+        return action
+    if not _is_blank(proposed.get("feedback")):
+        return action
+
+    drafted = await draft_feedback_comment(user_message, adapter=adapter)
+    if not drafted:
+        return action
+
+    proposed["feedback"] = drafted
+    if action.action == "update_grade":
+        return action.model_copy(update={"feedback": drafted})
+    return action.model_copy(update={"proposed_action": proposed})
+
+
 async def _ensure_message_is_written(
     action: Any, user_message: str, adapter: LLMAdapter
 ) -> Any:
@@ -4878,6 +4919,39 @@ async def _run_send_message_chain(
             recipient_ids=[r["user_id"] for r in recipients],
             recipient_names=[r["name"] for r in recipients],
         ))
+
+    # An empty group list means "announcement", because a message addressed to
+    # nobody in particular goes to the whole course. That default is right for
+    # a request that never named anyone — and dangerous for one that did.
+    #
+    # A request that specified an audience and arrived here with no groups did
+    # not ask for an announcement; it asked for a group we failed to resolve.
+    # Falling through would turn "tell the three students above the cutoff
+    # congratulations" into a public post to everyone, read by the students
+    # below the cutoff. Narrowing failures are recoverable; broadcasting to a
+    # class is not, so this asks instead.
+    targeted_but_unresolved = not groups and (
+        action.audience
+        or action.recipient_directives
+        or action.recipient_handle
+        or action.recipient_canvas_user_ids
+        or action.broadcast_to_all_students
+    )
+    if targeted_but_unresolved:
+        return {
+            "action": "clarify",
+            "clarify": True,
+            "question": (
+                "I couldn't work out who that message should go to, and I "
+                "don't want to post it to the whole class by mistake. Who "
+                "should receive it?"
+            ),
+            "partial_plan": {
+                "local_course_id": course.id,
+                "subject": action.subject,
+                "body": action.body,
+            },
+        }
 
     if action.also_announce_to_class or not groups:
         groups.append(MessageGroup(body=action.body, recipient_ids=[], recipient_names=[]))
@@ -7040,6 +7114,11 @@ async def handle_chat_message(
                         proposed.get("recipient_directives")
                         or proposed.get("broadcast_to_all_students")
                         or proposed.get("recipient_handle")
+                        # Same omission as the dispatch gate below: a wrapped
+                        # audience-only send_message stayed wrapped, so it was
+                        # previewed as a class-wide announcement instead of
+                        # having its audience resolved.
+                        or proposed.get("audience")
                     )
                 ) or proposed_name in ("update_assignment", "update_grade")
             if needs_unwrap:
@@ -7059,6 +7138,7 @@ async def handle_chat_message(
             # one land here, and before any dispatch branch reads subject or
             # body — the grouped chain copies them into every preview.
             action = await _ensure_message_is_written(action, message, adapter)
+            action = await _ensure_feedback_is_written(action, message, adapter)
             action = await _ensure_write_content_is_drafted(action, message, adapter)
 
             limited_reply = await _defer_canvas_limited_mode_reply(
@@ -7178,15 +7258,29 @@ async def handle_chat_message(
                     db, user, conversation, user_msg, action, message, adapter
                 )
             elif action.action == "send_message" and (
-                action.recipient_directives or action.broadcast_to_all_students or action.recipient_handle
+                action.recipient_directives
+                or action.broadcast_to_all_students
+                or action.recipient_handle
+                or action.audience
             ):
                 # Named recipients without known Canvas IDs, a whole-roster
-                # private broadcast, or a server-computed recipient handle
-                # from an earlier resolve_missing_submissions turn —
+                # private broadcast, a server-computed recipient handle from
+                # an earlier resolver turn, or a structured audience —
                 # resolve server-side (never trust the model with a raw
                 # ID) and build one preview per distinct message group,
                 # rather than executing directly or auto-wrapping into a
                 # single intent_preview.
+                #
+                # `audience` was missing from this list and the effect was the
+                # worst kind: a send_message carrying only an audience matched
+                # nothing here, skipped recipient resolution entirely, and
+                # reached the preview with no recipients at all — which is the
+                # shape of a public announcement. "Send them a message
+                # instead, saying congratulations, you are well above the
+                # cutoff" was queued as a post to the ENTIRE class, including
+                # the students below the cutoff and the five who had not
+                # submitted. A dropped audience does not fail closed on this
+                # action; it fails wide open.
                 result = await _run_send_message_chain(
                     db, user, conversation, user_msg, action, message, pending_message_id, adapter
                 )
