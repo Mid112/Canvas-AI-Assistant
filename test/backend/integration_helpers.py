@@ -49,10 +49,21 @@ def connect_canvas_and_sync_course(client: TestClient, headers: dict) -> int:
     (see COURSE RESOLUTION in build_system_prompt), so every chat turn
     below would get stuck asking "Which course is this about?" instead of
     producing a real preview."""
-    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+    # One pytest case may register multiple instructors.  A token derived only
+    # from PYTEST_CURRENT_TEST would be identical for every instructor in that
+    # case and correctly trip the production token-uniqueness guard.  Add a
+    # per-connection suffix while retaining the recognizable test-token base.
+    canvas_token = f"{unique_canvas_token()}-{uuid.uuid4().hex}"
+    with (
+        patch("app.services.auth.validate_token", new_callable=AsyncMock),
+        patch(
+            "app.services.auth.fetch_canvas_time_zone",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
         patch_resp = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
+            json={"canvas_token": canvas_token, "canvas_url": CANVAS_URL},
             headers=headers,
         )
     assert patch_resp.status_code == 200, patch_resp.json()

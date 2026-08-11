@@ -41,12 +41,29 @@ def _register_with_canvas(client, *, set_active: bool = True) -> tuple[dict, int
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
 
-    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        client.patch(
+    # Suffix keeps fingerprints unique across local re-runs of the same test
+    # name (unique_canvas_token alone is stable per PYTEST_CURRENT_TEST).
+    canvas_token = f"{unique_canvas_token()}-{uuid.uuid4().hex[:8]}"
+    with (
+        patch("app.services.auth.validate_token", new_callable=AsyncMock),
+        patch(
+            "app.services.canvas_timezone.fetch_canvas_time_zone",
+            new=AsyncMock(return_value="America/Vancouver"),
+        ),
+    ):
+        connected = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
+            json={"canvas_token": canvas_token, "canvas_url": CANVAS_URL},
             headers=headers,
         )
+    assert connected.status_code == 200, connected.text
+
+    if not set_active:
+        # No synced course and none named — course resolution must stay empty
+        # so analyze_course_submissions hard-stops with a plain explanation.
+        # Syncing a single course here lets the chat auto-pick it and then
+        # fail on a live Canvas call with the test token.
+        return headers, -1
 
     canvas_course_id = uuid.uuid4().int % 10_000_000
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
@@ -58,13 +75,13 @@ def _register_with_canvas(client, *, set_active: bool = True) -> tuple[dict, int
             "workflow_state": "available",
         }]
         resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+        assert resp.status_code == 200, resp.text
         local_course_id = resp.json()[0]["local_id"]
-        if set_active:
-            client.patch(
-                "/api/v1/canvas/active-course",
-                json={"local_course_id": local_course_id},
-                headers=headers,
-            )
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_course_id},
+            headers=headers,
+        )
 
     return headers, local_course_id
 

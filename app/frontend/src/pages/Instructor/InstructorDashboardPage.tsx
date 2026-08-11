@@ -5,15 +5,16 @@ import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
+import { filterNotificationsBySettings } from "@/lib/filter-notifications";
+import { pageShell } from "@/lib/page-shell";
 import { InstructorDashboardActiveCourses } from "@/pages/Instructor/InstructorDashboard/InstructorDashboardActiveCourses";
 import { InstructorDashboardHeader } from "@/pages/Instructor/InstructorDashboard/InstructorDashboardHeader";
 import { InstructorDashboardOverview } from "@/pages/Instructor/InstructorDashboard/InstructorDashboardOverview";
 import { InstructorDashboardQuickActions } from "@/pages/Instructor/InstructorDashboard/InstructorDashboardQuickActions";
 import { useCanvasInstructorCourses } from "@/pages/Instructor/InstructorCourses/useCanvasInstructorCourses";
+import type { InstructorCourse } from "@/types/course";
 import type { DashboardMetrics } from "@/types/dashboard";
 import { sharedDashboardQuickActions } from "@/types/dashboard";
-import type { InstructorCourse } from "@/types/course";
-import { pageShell } from "@/lib/page-shell";
 
 function deriveDashboardMetrics(
   courses: InstructorCourse[],
@@ -41,12 +42,18 @@ export function InstructorDashboardPage() {
     needsCanvasConnection,
   } = useCanvasInstructorCourses();
 
+  const notificationCount = filterNotificationsBySettings(
+    dashboard.notifications,
+    null,
+  ).length;
+
   if (!user?.has_canvas_token || needsCanvasConnection) {
     return (
       <div className={pageShell}>
         <InstructorDashboardHeader
           userName={user?.name ?? "Instructor"}
           institutionShortName={selectedInstitution.shortName}
+          notificationCount={notificationCount}
         />
         <CanvasConnectionRequired description="Connect Canvas to view course metrics, activity, and notifications from your institution." />
       </div>
@@ -58,6 +65,7 @@ export function InstructorDashboardPage() {
       <InstructorDashboardHeader
         userName={user?.name ?? "Instructor"}
         institutionShortName={selectedInstitution.shortName}
+        notificationCount={notificationCount}
       />
 
       {error ? <ErrorAlert message={error} /> : null}

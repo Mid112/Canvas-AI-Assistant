@@ -17,18 +17,6 @@ import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
 import type { MessageRecipient } from "@/types/messageDraft";
 
-/** The word that tells the instructor which of two very different sends this
- * is: a course-wide announcement or a private message. It was previously the
- * same weight as the surrounding sentence, so the distinction was easy to skim
- * past on a dialog whose action cannot be undone. */
-function DeliveryMode({ children }: { children: string }) {
-  return (
-    <strong className="text-base font-bold uppercase tracking-wide">
-      {children}
-    </strong>
-  );
-}
-
 interface ConfirmationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;

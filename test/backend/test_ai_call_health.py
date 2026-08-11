@@ -106,12 +106,15 @@ async def test_create_message_draft_records_success_without_changing_output():
     body = MessageDraftCreate(course_id=5, prompt="remind about the midterm", template_name="reminder")
 
     generated = AsyncMock(return_value=("Midterm Reminder", "Don't forget the midterm."))
+    resolve = AsyncMock(
+        return_value=(
+            _ACTIVE_LLM_CONFIG.provider,
+            {"provider": _ACTIVE_LLM_CONFIG.provider, "model": _ACTIVE_LLM_CONFIG.model},
+        )
+    )
     with (
         patch("app.services.messages._generate_draft_content", generated),
-        patch(
-            "app.services.messages.get_active_llm_config",
-            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
-        ),
+        patch("app.services.messages.resolve_generation_adapter_settings", new=resolve),
         patch("app.services.messages.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
         draft = await create_message_draft(db, user, body)
@@ -130,12 +133,15 @@ async def test_create_message_draft_records_failure_without_changing_fallback():
     body = MessageDraftCreate(course_id=5, prompt="remind about the midterm", template_name="reminder")
 
     failing = AsyncMock(side_effect=RuntimeError("LLM unavailable"))
+    resolve = AsyncMock(
+        return_value=(
+            _ACTIVE_LLM_CONFIG.provider,
+            {"provider": _ACTIVE_LLM_CONFIG.provider, "model": _ACTIVE_LLM_CONFIG.model},
+        )
+    )
     with (
         patch("app.services.messages._generate_draft_content", failing),
-        patch(
-            "app.services.messages.get_active_llm_config",
-            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
-        ),
+        patch("app.services.messages.resolve_generation_adapter_settings", new=resolve),
         patch("app.services.messages.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
         draft = await create_message_draft(db, user, body)
@@ -168,13 +174,23 @@ async def test_generate_assignment_draft_records_success_without_changing_output
     )
     body = AssignmentDraftRequest(prompt="Create a quiz on recursion")
 
+    resolve = AsyncMock(
+        return_value=(
+            _ACTIVE_LLM_CONFIG.provider,
+            {"provider": _ACTIVE_LLM_CONFIG.provider, "model": _ACTIVE_LLM_CONFIG.model},
+        )
+    )
     with (
         patch("app.services.assignment_draft.get_llm_adapter", return_value=adapter),
         patch(
-            "app.services.assignment_draft.get_active_llm_config",
-            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+            "app.services.assignment_draft.resolve_generation_adapter_settings",
+            new=resolve,
         ),
         patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
+        patch(
+            "app.services.assignment_draft.get_instructor_canvas_timezone_for_user",
+            new=AsyncMock(return_value="UTC"),
+        ),
     ):
         result = await generate_assignment_draft(body, db, user_id=42)
 
@@ -198,8 +214,16 @@ async def test_generate_assignment_draft_records_failure_when_response_is_unpars
     with (
         patch("app.services.assignment_draft.get_llm_adapter", return_value=adapter),
         patch(
-            "app.services.assignment_draft.get_active_llm_config",
-            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+            "app.services.assignment_draft.resolve_generation_adapter_settings",
+            new=AsyncMock(
+                return_value=(
+                    _ACTIVE_LLM_CONFIG.provider,
+                    {
+                        "provider": _ACTIVE_LLM_CONFIG.provider,
+                        "model": _ACTIVE_LLM_CONFIG.model,
+                    },
+                )
+            ),
         ),
         patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
@@ -232,8 +256,16 @@ async def test_generate_assignment_draft_records_failure_and_still_raises_http_e
     with (
         patch("app.services.assignment_draft.get_llm_adapter", return_value=adapter),
         patch(
-            "app.services.assignment_draft.get_active_llm_config",
-            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+            "app.services.assignment_draft.resolve_generation_adapter_settings",
+            new=AsyncMock(
+                return_value=(
+                    _ACTIVE_LLM_CONFIG.provider,
+                    {
+                        "provider": _ACTIVE_LLM_CONFIG.provider,
+                        "model": _ACTIVE_LLM_CONFIG.model,
+                    },
+                )
+            ),
         ),
         patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
