@@ -237,3 +237,48 @@ def test_an_unknown_audience_kind_is_rejected_rather_than_guessed():
 
     with pytest.raises(pydantic.ValidationError):
         AudienceSpec(kind="students_i_like")
+
+
+# ------------------------------------------------- who decides the score unit
+
+
+def test_the_models_basis_wins_over_a_keyword_in_the_text():
+    """A keyword cannot tell which noun a unit belongs to.
+
+    "who scored 70 to 90 on the midterm, it's out of 200 points" names the
+    assignment's total, not the band's unit — but "out of 200 points" matches
+    the points pattern. That sniff used to take priority over the model, so on
+    an out-of-200 assignment it selected the weakest students where the model
+    had read the strongest, and suppressed the percent-or-points question that
+    a null basis would have raised.
+    """
+    from app.services.score_range import detect_explicit_basis
+
+    message = "message students who scored between 70 and 90 on the midterm, it is out of 200 points"
+    model_basis = "percentage"
+
+    # The precedence, as the chain now applies it.
+    assert (model_basis or detect_explicit_basis(message)) == "percentage"
+    # The sniff on its own still reads the wrong noun — which is why it lost.
+    assert detect_explicit_basis(message) == "points"
+
+
+def test_the_text_check_still_fills_in_when_the_model_said_nothing():
+    """Kept, not deleted: it is conservative by construction and only ever
+    narrows an ambiguity. Removing it would cost an unnecessary
+    percent-or-points question on requests that plainly stated the unit."""
+    from app.services.score_range import detect_explicit_basis
+
+    assert (None or detect_explicit_basis("who scored between 70 and 90 percent")) == (
+        "percentage"
+    )
+
+
+def test_mixed_or_absent_units_decide_nothing():
+    """None whenever both units or neither appear, so the worst it can do is
+    decline to help and let the set comparison run."""
+    from app.services.score_range import detect_explicit_basis
+
+    assert detect_explicit_basis("70 points out of 100 percent") is None
+    assert detect_explicit_basis("who scored between 70 and 90") is None
+    assert detect_explicit_basis(None) is None

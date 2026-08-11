@@ -7,12 +7,10 @@ import pytest
 
 from app.mcp_tools.dispatcher import parse_action
 from app.mcp_tools.schemas import SemanticIntentAction
+from app.services import chat as chat_service
 from app.services.chat import (
     _CHAINABLE_READ_ACTIONS,
-    _explicit_announcement_request,
-    _explicit_dual_delivery_request,
     _format_assignment_status_match,
-    _preserve_dual_delivery,
     _rebase_action_to_course,
     _resolve_pending_course_correction,
 )
@@ -270,21 +268,37 @@ def test_semantic_announcement_removes_private_recipient_fields():
     assert "broadcast_to_all_students" not in proposed
 
 
-def test_negated_announcement_keeps_private_delivery_language():
-    assert _explicit_announcement_request("make an announcement to the class")
-    assert not _explicit_announcement_request(
-        "don't make this an announcement, just message Student One privately"
-    )
-    assert not _explicit_announcement_request("Don't forget to make an announcement tomorrow")
+def test_the_model_owns_delivery_mode():
+    """Announcement-vs-private is decided once, by the model, from the whole
+    sentence — and nothing re-decides it from keywords afterwards.
+
+    Four regexes used to re-read the raw message and overwrite the choice,
+    stripping recipients on a match. Each near-miss needed another pattern: a
+    negation lookaround, a carve-out for "don't forget to post an
+    announcement", a conjunction rule to keep "and also message Alice", then a
+    flag check letting the model override the override. Five helpers deciding
+    one boolean the model states outright.
+
+    Asserted by absence so they cannot quietly return. The gate is unchanged:
+    the Messages composer names the delivery before anything is sent.
+    """
+    for removed in (
+        "_explicit_announcement_request",
+        "_explicit_dual_delivery_request",
+        "_force_announcement_delivery",
+        "_preserve_dual_delivery",
+        "_is_combined_announcement_request",
+    ):
+        assert not hasattr(chat_service, removed), (
+            f"{removed} is back. Delivery mode is the model's decision; "
+            "re-deriving it from keywords is what this removed."
+        )
 
 
-def test_dual_delivery_request_is_distinguished_from_announcement_only():
-    message = "Make an announcement and also privately message Student One"
-    assert _explicit_dual_delivery_request(message)
-    assert _explicit_announcement_request(message)
-
-
-def test_dual_delivery_preserves_recipients_and_marks_public_broadcast():
+def test_a_dual_delivery_action_keeps_both_halves():
+    """"Announce it and also message Alice separately" is one turn producing a
+    public post AND a targeted message. The old path could collapse it to
+    announcement-only and drop Alice with nothing in the reply saying so."""
     action = parse_action(
         json.dumps(
             {
@@ -292,6 +306,7 @@ def test_dual_delivery_preserves_recipients_and_marks_public_broadcast():
                 "local_course_id": 31,
                 "subject": "Update",
                 "body": "Please read this.",
+                "also_announce_to_class": True,
                 "recipient_directives": [
                     {"student_reference": "Student One", "body": "Please read this."}
                 ],
@@ -299,10 +314,28 @@ def test_dual_delivery_preserves_recipients_and_marks_public_broadcast():
         )
     )
 
-    preserved = _preserve_dual_delivery(action)
+    assert action.also_announce_to_class is True
+    assert len(action.recipient_directives) == 1
 
-    assert preserved.recipient_directives == action.recipient_directives
-    assert preserved.also_announce_to_class is True
+
+def test_an_announcement_action_carries_no_recipients():
+    """The model addresses an announcement to nobody in particular, and
+    nothing adds recipients to it on the way through."""
+    action = parse_action(
+        json.dumps(
+            {
+                "action": "send_message",
+                "local_course_id": 31,
+                "subject": "Long weekend",
+                "body": "Campus is closed Monday.",
+            }
+        )
+    )
+
+    assert not action.recipient_directives
+    assert not action.recipient_canvas_user_ids
+    assert action.recipient_handle is None
+    assert action.broadcast_to_all_students is False
 
 
 def test_submission_status_reads_are_chainable():

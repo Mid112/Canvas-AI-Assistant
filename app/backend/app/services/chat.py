@@ -145,141 +145,6 @@ from app.services.write_preview import generate_write_preview
 
 logger = logging.getLogger(__name__)
 
-_ANNOUNCEMENT_REQUEST_RE = re.compile(
-    r"\b(announcement|announce|course[- ]wide|post to the class|post for the class)\b",
-    re.IGNORECASE,
-)
-_NEGATED_ANNOUNCEMENT_RE = re.compile(
-    r"\b(?:don't|do not|not|never|without)\b(?!\s+forget\b)[^,.!?]{0,80}"
-    r"\b(?:announcement|announce|course[- ]wide)\b",
-    re.IGNORECASE,
-)
-_REMINDER_ANNOUNCEMENT_RE = re.compile(
-    r"\b(?:don't|do not|never)\s+forget\s+to\s+(?:make|post|send|publish)?\s*"
-    r"(?:an?\s+)?(?:announcement|announce|course[- ]wide)\b",
-    re.IGNORECASE,
-)
-_PRIVATE_MESSAGE_REQUEST_RE = re.compile(
-    r"\b(?:private(?:ly)?|just message|send .*\bmessage|message\s+\w+)\b",
-    re.IGNORECASE,
-)
-
-
-def _explicit_announcement_request(message: str) -> bool:
-    """Recognize explicit public-audience language as a server-side guard."""
-    if _NEGATED_ANNOUNCEMENT_RE.search(message) or _REMINDER_ANNOUNCEMENT_RE.search(message):
-        return False
-    if _PRIVATE_MESSAGE_REQUEST_RE.search(message) and not _explicit_dual_delivery_request(message):
-        return False
-    return bool(_ANNOUNCEMENT_REQUEST_RE.search(message))
-
-
-def _explicit_dual_delivery_request(message: str) -> bool:
-    """Return true when the user explicitly requests both audiences.
-
-    This is intentionally conjunction-based: merely mentioning an
-    announcement in a private-message sentence must not broaden delivery,
-    while an explicit "and also privately" request should retain recipients.
-    """
-    if _NEGATED_ANNOUNCEMENT_RE.search(message) or _REMINDER_ANNOUNCEMENT_RE.search(message):
-        return False
-    has_announcement = bool(_ANNOUNCEMENT_REQUEST_RE.search(message))
-    has_private = bool(_PRIVATE_MESSAGE_REQUEST_RE.search(message))
-    has_conjunction = bool(re.search(r"\b(?:and|also|both)\b", message, re.IGNORECASE))
-    return has_announcement and has_private and has_conjunction
-
-
-def _is_combined_announcement_request(action: Any) -> bool:
-    """True when the action already says "announce AND message these people".
-
-    The action-shaped counterpart to _explicit_dual_delivery_request above,
-    which reads the same intent off the message text. Either is enough to keep
-    the private half: the phrasing may be too implicit for the regex while the
-    model has still understood it and filled in recipients.
-
-    also_announce_to_class exists for exactly one shape: a public announcement
-    plus targeted messages in the same turn. When the model has set it
-    alongside real recipients it has already understood a request like
-    "announce this and also message Alice separately", and forcing
-    announcement-only would silently drop Alice's message — the private half of
-    a request the instructor made explicitly, with nothing in the reply to say
-    it was dropped.
-
-    Deliberately narrow: it takes the flag AND recipients together. The flag
-    alone cannot re-enable private delivery, so a plain "announce this" is
-    still forced public exactly as before.
-    """
-    if action.action == "send_message":
-        return bool(
-            getattr(action, "also_announce_to_class", False)
-            and (
-                getattr(action, "recipient_directives", None)
-                or getattr(action, "recipient_canvas_user_ids", None)
-                or getattr(action, "recipient_handle", None)
-                or getattr(action, "broadcast_to_all_students", False)
-            )
-        )
-    if action.action == "intent_preview":
-        proposed = action.proposed_action
-        if not isinstance(proposed, dict) or proposed.get("action") != "send_message":
-            return False
-        return bool(
-            proposed.get("also_announce_to_class")
-            and (
-                proposed.get("recipient_directives")
-                or proposed.get("recipient_canvas_user_ids")
-                or proposed.get("recipient_handle")
-                or proposed.get("broadcast_to_all_students")
-            )
-        )
-    return False
-
-
-def _force_announcement_delivery(action: Any) -> Any:
-    """Strip private recipient fields from an explicit announcement action."""
-    if action.action == "send_message":
-        return action.model_copy(
-            update={
-                "recipient_canvas_user_ids": None,
-                "recipient_directives": None,
-                "recipient_handle": None,
-                "broadcast_to_all_students": False,
-                "also_announce_to_class": False,
-            }
-        )
-    if action.action == "intent_preview":
-        proposed = action.proposed_action
-        if proposed.get("action") != "send_message":
-            return action
-        cleaned = dict(proposed)
-        for key in (
-            "recipient_canvas_user_ids",
-            "recipient_directives",
-            "recipient_handle",
-            "broadcast_to_all_students",
-            "also_announce_to_class",
-        ):
-            cleaned.pop(key, None)
-        return action.model_copy(update={"proposed_action": cleaned})
-    return action
-
-
-def _preserve_dual_delivery(action: Any) -> Any:
-    """Keep private recipients while marking an explicit public broadcast."""
-    if action.action == "send_message":
-        return action.model_copy(update={"also_announce_to_class": True})
-    if action.action == "intent_preview":
-        proposed = action.proposed_action
-        if proposed.get("action") != "send_message":
-            return action
-        proposed = {
-            **proposed,
-            "also_announce_to_class": True,
-        }
-        return action.model_copy(update={"proposed_action": proposed})
-    return action
-
-
 def _rebase_action_to_course(action: Any, local_course_id: int) -> Any:
     """Move a pending proposal to a verified course without carrying IDs
     that were resolved in the old course across the boundary.
@@ -2812,10 +2677,27 @@ async def _run_resolve_score_range_chain(
     points_possible = assignment_row.points_possible if assignment_row else None
 
     low, high = sorted((action.min_score, action.max_score))
-    # The model's `basis` is only a report of what the instructor wrote, so
-    # the literal text is checked first: it is the same evidence, available
-    # server-side, and not subject to the model having paraphrased it away.
-    requested_basis = detect_explicit_basis(user_message) or action.basis
+    # The model leads; the text check is the safety net, not the authority.
+    #
+    # These used to be the other way round, on the reasoning that the literal
+    # text is the same evidence and not subject to paraphrase. The flaw is
+    # that a keyword cannot tell which noun the unit belongs to:
+    #
+    #   "who scored 70 to 90 on the midterm, it's out of 200 points"
+    #
+    # names the assignment's total, not the band's unit, and "out of 200
+    # points" matches _POINTS_PATTERN. Read as points that selects the
+    # weakest students; read as percent, the strongest — and because the
+    # sniff won, it overrode a model that may well have left basis null,
+    # which is the value that would have triggered the percent-or-points
+    # question instead of quietly picking the wrong half of the class.
+    #
+    # Deciding which reading a sentence intends is exactly the judgement the
+    # model makes with the whole sentence in view. So it goes first, and the
+    # text check only fills in when the model stated nothing — where its
+    # conservatism (None whenever both units or neither appear) means the
+    # worst it can do is decline to help.
+    requested_basis = action.basis or detect_explicit_basis(user_message)
 
     print(f"Checking {course.name} for scores in {low}-{high}")
     decision = await _run_tracked_read(
@@ -6359,12 +6241,31 @@ different audiences, so never guess which one the user means.
 Use send_message for general communication that is not tied to a specific
 assignment submission or gradebook feedback.
 
-For an explicit announcement request ("make an announcement", "post this
-to the class", "announce to everyone"), use semantic_intent with
-delivery_mode="announcement" and do not include recipients. For a private
-request, use delivery_mode="private_message" and include named recipients,
-a resolved recipient handle, or an explicit private broadcast. The server
-uses this mode to prevent an announcement from becoming a private message.
+You decide the delivery, and nothing downstream second-guesses it. The
+server used to re-read the message for announcement keywords and overwrite
+your choice; it no longer does. Set it deliberately:
+
+- Public announcement — "make an announcement", "post this to the class",
+  "announce to everyone": delivery_mode="announcement" and NO recipients of
+  any kind. An announcement goes to the whole course by being addressed to
+  nobody in particular.
+- Private message — named people, a recipient_handle, an audience, or an
+  explicit private broadcast: delivery_mode="private_message" WITH those
+  recipients set.
+- Both at once — "announce it and also message Alice separately": set
+  also_announce_to_class=true AND keep the recipients. This is one turn that
+  produces a public post plus targeted messages. Do not collapse it to one.
+
+Read what the sentence is asking for, not which words appear in it:
+- "don't forget to post an announcement about the exam" is asking you to
+  post one.
+- "remind me to announce this later" is not a request to announce anything
+  now — that is a note to the instructor, so respond, do not propose.
+- "message the class" is a private broadcast to every student, which is not
+  the same as an announcement even though both reach everyone: one lands in
+  each student's inbox, the other on the course page.
+Getting this wrong sends real mail to the wrong audience, so decide it from
+the whole request rather than from a keyword.
 
 If it's genuinely unclear whether the user wants a private message to
 specific people or a public announcement (e.g. "message my students" with
@@ -7109,12 +7010,26 @@ async def handle_chat_message(
                 )
             if pending_course_switch is not None and conversation.course_id is not None:
                 action = _rebase_action_to_course(action, conversation.course_id)
-            if _explicit_dual_delivery_request(message):
-                action = _preserve_dual_delivery(action)
-            elif _explicit_announcement_request(message) and not _is_combined_announcement_request(
-                action
-            ):
-                action = _force_announcement_delivery(action)
+            # Delivery mode is the model's call, not a keyword search's.
+            #
+            # Four regexes used to re-decide announcement vs private message
+            # from the raw text and overwrite whatever the model had chosen,
+            # stripping recipients on a match. They could only ever approximate
+            # a judgement the model had already made with the whole sentence in
+            # view, and each near-miss needed another pattern: a negation
+            # lookaround, then a carve-out for "don't forget to post an
+            # announcement", then a conjunction rule so "announce it and also
+            # message Alice" kept Alice, then a flag check so the model could
+            # override the override. Five helpers deciding one boolean the
+            # model states outright.
+            #
+            # Nothing is unguarded by removing them. send_message is a
+            # form-handoff action: the draft opens in the Messages composer,
+            # and the confirmation dialog names the delivery in the largest
+            # text on screen — ANNOUNCEMENT when no recipients are selected,
+            # PRIVATE MESSAGE when they are — before anything is sent. A wrong
+            # reading is one visible field the instructor changes, which is
+            # what the preview gate is for.
             needs_unwrap = False
             if action.action == "intent_preview":
                 proposed = action.proposed_action
