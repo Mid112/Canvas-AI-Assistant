@@ -24,6 +24,7 @@ from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_act
 from app.mcp_tools.dispatcher import _resolve_course as resolve_course
 from app.mcp_tools.schemas import (
     ACTION_SCHEMAS,
+    FORM_HANDOFF_ACTIONS,
     READ_ACTIONS,
     WRITE_ACTIONS,
     AnalyzeCourseSubmissionsAction,
@@ -1101,6 +1102,124 @@ def _inject_course_into_envelope(parsed_envelope: dict, local_course_id: int | N
 
     target["local_course_id"] = local_course_id
     return parsed_envelope
+
+
+# The fields a form-handoff write owns outright: the app drafts them from the
+# instructor's own sentence, and the page that opens shows every one of them
+# filled in and editable before anything reaches Canvas. A clarify that asks
+# only for these is asking for something it is about to be handed for free.
+#
+# Identity is deliberately absent — course, student, assignment, recipients.
+# Those are not content: nothing can write them from the request, and getting
+# one wrong sends a real message to the wrong people. Asking there is right,
+# and this rewrite must never suppress it.
+_FORM_OWNED_FIELDS = frozenset(
+    {
+        "subject",
+        "body",
+        "title",
+        "description",
+        "due_date",
+        "due_at",
+        "points_possible",
+        "time_limit",
+        "allowed_attempts",
+        "new_grade",
+    }
+)
+
+
+def _content_only_clarify_fields(question: str) -> set[str] | None:
+    """The fields a clarify asks for, when it asks only for form-owned ones.
+
+    Reads the bare comma-separated list the prompt asks the model to produce
+    ("subject, body") and nothing else. Prose is left alone on purpose: a
+    question we cannot read exactly is not one to rewrite a turn over, and the
+    fallback is the instructor being asked — the behaviour we are improving
+    on, not a failure. None whenever any token is unreadable or names
+    something outside _FORM_OWNED_FIELDS, so "subject, recipients" still asks.
+    """
+    tokens = [part.strip().strip(".!?").lower() for part in question.split(",")]
+    if not all(tokens):
+        return None
+    if not all(token in _FORM_OWNED_FIELDS for token in tokens):
+        return None
+    return set(tokens)
+
+
+def _form_handoff_action_for(fields: set[str]) -> str | None:
+    """Which form-handoff write these field names belong to, when exactly one
+    schema claims any of them.
+
+    Read off the schemas rather than a hardcoded map, the same self-maintaining
+    approach _inject_course_into_envelope uses, so a new field on an action is
+    picked up without a second place to remember. Ambiguity returns None and
+    the clarify stands: title/description alone cannot distinguish an
+    assignment from a quiz, and guessing between two different Canvas objects
+    is worse than one more question.
+    """
+    owners = {
+        name
+        for name in FORM_HANDOFF_ACTIONS
+        if (schema := ACTION_SCHEMAS.get(name)) is not None
+        and fields & set(schema.model_fields)
+    }
+    return owners.pop() if len(owners) == 1 else None
+
+
+def _rewrite_content_only_clarify(parsed_envelope: dict) -> dict:
+    """Turn a clarify that only wants content into the write it was avoiding.
+
+    FORM HANDOFF in the system prompt tells the model not to clarify these,
+    but a prompt is advice and this one demonstrably did not hold: asked for
+    an announcement about a long weekend, the model returned
+    {"question": "subject, body"} rather than proposing anything — an
+    instructor being asked to write the message they had just written.
+
+    Removing the dispatcher's own interrogation only ever covered the case
+    where the model proposed the action. This covers the case where it
+    declined to, which is the same defect one layer up, and it belongs
+    server-side for the same reason the rest of the write gate does: the
+    guarantee should not depend on the model having followed instructions.
+
+    Nothing here weakens that gate. The rewrite produces an intent_preview,
+    which is exactly what the model was supposed to send — so the preview is
+    still built, still shown, and still confirmed before Canvas is touched.
+    All that changes is that the instructor sees a drafted message they can
+    edit instead of a question they have already answered.
+    """
+    if parsed_envelope.get("action") != "clarify":
+        return parsed_envelope
+    question = parsed_envelope.get("question")
+    partial_plan = parsed_envelope.get("partial_plan")
+    if not isinstance(question, str) or not isinstance(partial_plan, dict):
+        return parsed_envelope
+
+    asked = _content_only_clarify_fields(question)
+    if not asked:
+        return parsed_envelope
+
+    # Both halves identify the action: the answer the model wanted, and what
+    # it had already gathered. "subject, body" over a partial_plan holding
+    # nothing but a course name is only recognisable from the question.
+    target = _form_handoff_action_for(asked | set(partial_plan))
+    if target is None:
+        return parsed_envelope
+
+    proposed = {
+        key: value
+        for key, value in partial_plan.items()
+        # course_name is dropped rather than carried: the course is resolved
+        # separately and re-injected as local_course_id just below, and a
+        # leftover name is one more thing that can disagree with the id.
+        if key not in ("action", "course_name")
+    }
+    proposed["action"] = target
+    return {
+        "action": "intent_preview",
+        "summary": "I'll prepare this for your review.",
+        "proposed_action": proposed,
+    }
 
 
 _ReadResult = TypeVar("_ReadResult")
@@ -5463,6 +5582,8 @@ unrelated to teaching), respond ONLY with:
 {"action": "out_of_scope", "message": "<brief description of the request>"}
 
 AMBIGUITY CHECK — if the request is in scope but missing information:
+This check does NOT apply to create_assignment, create_quiz, send_message or
+update_grade. Those never clarify for a missing field — see FORM HANDOFF.
 Only ask about fields that are REQUIRED by that action's schema (see
 AVAILABLE ACTIONS) and that the user did not give you, directly or
 earlier in CONVERSATION HISTORY / FIELD MEMORY. Do not treat optional
@@ -5557,21 +5678,28 @@ ask whether they mean assignment feedback on a submission or a private
 message to the student.
 
 SEND_MESSAGE HANDOFF:
-IMPORTANT — send_message skips the missing-field AMBIGUITY CHECK for
-subject and body when the user's request implies a recipient set that
-needs server-side resolution (recipient_handle from a prior
-resolve_missing_submissions turn, recipient_directives naming students,
-or broadcast_to_all_students). When the user says "send reminders to
-students who haven't submitted assignment X" or "message all students
-saying Y", propose send_message immediately with whatever details you
-have. If the user provided a body or subject, include them; if not,
-leave them empty ("") and the Messages compose form handoff lets the
-user fill them in manually. Do not clarify subject or body when the
-user's request already implies who should receive the message — propose
-the action and let the form handle the rest. The one exception: if the
-user asks to "send a message" but doesn't say WHO (no recipient
-directives, no handle, no broadcast, no "students who haven't
-submitted"), ask who the recipients should be.
+send_message follows FORM HANDOFF above. NEVER clarify for a missing subject
+or body — not ever, and not for any kind of message. This holds whether the
+request names recipients, implies them, or is a public announcement with no
+recipients at all.
+
+"Make an announcement about the long weekend" is a COMPLETE request. Propose
+it. The instructor already told you what the message is about; asking them to
+supply a subject and a body is asking them to write the message they just
+described. Leave subject and body as "" — the app writes both from their own
+sentence before the Messages composer opens, and every field stays editable
+there.
+
+Set delivery_mode="announcement" and no recipients for a public announcement.
+For a private message include the recipients you were given: copy a
+recipient_handle from an earlier resolve_missing_submissions or
+resolve_score_range turn verbatim, or set recipient_directives from the
+user's own words, or set broadcast_to_all_students for the whole roster.
+
+The one and only reason to clarify a send_message: the user asked to "send a
+message" and named nobody at all — no recipients, no handle, no broadcast,
+and no public announcement either. Then ask who it goes to, and only that.
+Recipients are the one thing the app cannot write for them.
 
 READ ACTIONS — execute immediately, no preview:
 fetch_courses, fetch_assignments, fetch_quizzes, fetch_students, fetch_submissions,
@@ -6597,6 +6725,10 @@ async def handle_chat_message(
         # nothing to inject into and falls through to the existing
         # _plain_text_response/parse_action handling on the original raw_output.
         if isinstance(parsed_envelope, dict):
+            # Before the injection, not after: this turns a clarify into an
+            # intent_preview wrapping a real write, and that write needs the
+            # resolved course id putting into it like any other.
+            parsed_envelope = _rewrite_content_only_clarify(parsed_envelope)
             parsed_envelope = _inject_course_into_envelope(parsed_envelope, resolved_local_course_id)
             raw_output = json.dumps(parsed_envelope)
 
