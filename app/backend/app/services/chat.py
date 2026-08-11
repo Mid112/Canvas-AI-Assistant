@@ -54,8 +54,15 @@ from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
 from app.schemas.canvas import SubmissionStatus
+from app.services.analysis import SUBMITTED_STATUSES
 from app.services.assignment_draft import draft_assignment_content
 from app.services.assignment_rate import find_assignments_by_submission_rate
+from app.services.audience import (
+    AudienceScope,
+    bank_audience,
+    read_audience_phrase,
+    select_by_status,
+)
 from app.services.canvas import (
     CanvasTokenRequiredError,
     _is_expected_canvas_token_sync_error,
@@ -3130,9 +3137,10 @@ async def _run_analyze_course_submissions_chain(
     }
 
 
-_ACTUAL_SUBMISSION_STATUSES = frozenset(
-    {SubmissionStatus.graded, SubmissionStatus.submitted, SubmissionStatus.late}
-)
+# Derived, not restated. This was a third hand-written copy of the same three
+# statuses; "submitted" meaning one thing in analytics and another in chat is
+# how an instructor gets two different counts for one question.
+_ACTUAL_SUBMISSION_STATUSES = frozenset(SUBMITTED_STATUSES)
 _ASSIGNMENT_STATUS_MAX_RESULTS = 25
 _ASSIGNMENT_STATUS_MAX_CONCURRENT_FETCHES = 4
 
@@ -3758,7 +3766,9 @@ async def _resolve_grade_target(
         }
 
     student_id = action.student_id
-    bulk_update = bool(action.student_reference and _is_bulk_student_reference(action.student_reference))
+    # One reading of the phrase, shared with the message chain — see audience.
+    reading = read_audience_phrase(action.student_reference)
+    bulk_update = reading.scope is AudienceScope.EVERYONE
     if student_id is not None:
         valid_ids = {_coerce_int(s.get("user_id")) for s in submissions}
         valid_ids.discard(None)
@@ -3823,13 +3833,37 @@ async def _resolve_grade_target(
             assignment_name=assignment_name,
         )
 
+    if reading.scope is AudienceScope.BY_STATUS and reading.statuses:
+        targeted = select_by_status(submissions, reading.statuses)
+        if not targeted:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": (
+                    f"No students in {course.name} match that on "
+                    f"{assignment_name or 'that assignment'}, so there's "
+                    "nothing to apply it to. Who did you mean?"
+                ),
+                "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+            }
+        return await _grade_handoff_with_reusable_audience(
+            db,
+            conversation,
+            course,
+            assignment_id,
+            targeted,
+            action,
+            assignment_name=assignment_name,
+        )
+
     if bulk_update:
-        return _build_grade_handoff_result(
+        return await _grade_handoff_with_reusable_audience(
+            db,
+            conversation,
             course,
             assignment_id,
             submissions,
-            action.new_grade,
-            action.feedback,
+            action,
             assignment_name=assignment_name,
         )
 
@@ -3970,6 +4004,66 @@ def _grade_handoff_student_phrase(submissions: list[dict], student_count: int) -
     if len(names) == 2:
         return f"{names[0]} and {names[1]}"
     return f"{names[0]}, {names[1]}, and {names[2]}"
+
+
+async def _grade_handoff_with_reusable_audience(
+    db: AsyncSession,
+    conversation: Conversation,
+    course: Course,
+    assignment_id: int,
+    submissions: list[dict],
+    action: Any,
+    *,
+    assignment_name: str | None = None,
+) -> dict:
+    """A grade handoff that leaves its audience behind for the next turn.
+
+    Working out who a request covers is the expensive, error-prone half of it,
+    and until now only the analytics resolvers banked that work:
+    resolve_missing_submissions and resolve_score_range each stored their
+    group and handed back a recipient_handle, so a later send_message could
+    reuse the exact set. The grade chain resolved just as carefully and then
+    threw the answer away.
+
+    That made the two directions behave differently for no reason an
+    instructor could see. "Message everyone who missed lab 4, actually give
+    them feedback instead" carried the group across, because the message side
+    had a handle. "Give feedback to everyone who submitted, actually send them
+    a message instead" started over, because the grade side had none — and
+    starting over is where a set silently changes size.
+
+    recipient_handle is on both UpdateGradeAction and SendMessageAction and
+    materialize_resolved_set checks ownership and expiry rather than which
+    feature produced the set, so one handle already works for either channel.
+    This just stops the grade side being the one that never issues one.
+    """
+    result = _build_grade_handoff_result(
+        course,
+        assignment_id,
+        submissions,
+        action.new_grade,
+        action.feedback,
+        assignment_name=assignment_name,
+    )
+    # Only a real handoff carries an audience; a clarify has not resolved one.
+    handoff = result.get("grade_handoff")
+    if not isinstance(handoff, dict):
+        return result
+
+    handle = await bank_audience(
+        db,
+        conversation,
+        kind="grade_targets",
+        query={
+            "local_course_id": course.id,
+            "assignment_id": assignment_id,
+            "student_reference": getattr(action, "student_reference", None),
+        },
+        rows=submissions,
+    )
+    if handle:
+        handoff["recipient_handle"] = handle
+    return result
 
 
 def _build_grade_handoff_result(
@@ -4126,20 +4220,10 @@ def _grade_partial_plan(action: Any, local_course_id: int, assignment_id: int | 
 
 
 def _is_bulk_student_reference(reference: str) -> bool:
-    normalized = re.sub(r"[^a-z0-9]+", " ", reference.lower()).strip()
-    if normalized.startswith("all ") and "student" in normalized:
-        return True
-    bulk_terms = {
-        "all",
-        "all students",
-        "everyone",
-        "every student",
-        "everybody",
-        "the class",
-        "whole class",
-        "entire class",
-    }
-    return normalized in bulk_terms
+    """Kept as a thin name over the shared reader — audience.py owns what a
+    "who" phrase means now, so the grade chain and the message chain cannot
+    drift into reading the same sentence differently."""
+    return read_audience_phrase(reference).scope is AudienceScope.EVERYONE
 
 
 @dataclass
@@ -4670,9 +4754,32 @@ async def _run_send_message_chain(
             recipient_names=[s.get("name") or f"Student {s['canvas_user_id']}" for s in active],
         ))
 
-    if action.recipient_directives:
+    directives = list(action.recipient_directives or [])
+    if directives:
+        # A directive whose reference names the whole class is a group, not a
+        # person. Read with the same audience reader the grade chain uses, so
+        # "everyone" means one thing across both channels — this path used to
+        # hand "all students" to the name resolver and have it search the
+        # roster for a student called that.
+        class_wide = [
+            d
+            for d in directives
+            if read_audience_phrase(d.student_reference).scope is AudienceScope.EVERYONE
+        ]
+        for directive in class_wide:
+            active = [s for s in roster if s.get("enrollment_state") == "active"]
+            groups.append(MessageGroup(
+                body=directive.body or action.body,
+                recipient_ids=[int(s["canvas_user_id"]) for s in active],
+                recipient_names=[
+                    s.get("name") or f"Student {s['canvas_user_id']}" for s in active
+                ],
+            ))
+        directives = [d for d in directives if d not in class_wide]
+
+    if directives:
         resolved = await _resolve_recipient_directives(
-            db, user, conversation, user_msg, course, roster, action.recipient_directives, user_message,
+            db, user, conversation, user_msg, course, roster, directives, user_message,
             adapter,
         )
         if isinstance(resolved, dict):
@@ -5650,6 +5757,20 @@ from natural-language guesses.
 create_quiz follows FORM HANDOFF above: propose immediately with whatever
 you have, never clarify for a missing title, description, due date or point
 value. The quiz review form owns those.
+
+REUSING A GROUP ACROSS CHANNELS:
+Working out who a request covers is the expensive part, so once the app has
+resolved a group it hands back a "recipient_handle" and that handle works for
+any channel. resolve_missing_submissions, resolve_score_range AND a grade
+handoff all produce one.
+So when the instructor changes their mind about HOW to reach a group they
+already named — "actually send them a message instead", "give them that
+feedback instead", "post that as an announcement instead" — copy the
+recipient_handle from the previous turn's result verbatim into the new action
+rather than re-describing who they are. Re-deriving the group is how it
+silently changes size between two turns that named the same people.
+Keep the content too: "instead of a message, give them that feedback" means
+the feedback text is the message you already drafted.
 
 UPDATE_GRADE HANDOFF:
 update_grade follows FORM HANDOFF above, with one addition: never invent a
